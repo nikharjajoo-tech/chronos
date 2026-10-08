@@ -1,0 +1,391 @@
+/* Floating clock. Drawn on a fixed 240×300 stage that is scaled to the window,
+   so every measurement below is in stage pixels. */
+
+html.clock-window,
+html.clock-window body {
+  background: transparent;
+  overflow: hidden;
+}
+
+.clock-root {
+  --putty-hi: #f4ead3;
+  --putty-lo: #d6c29b;
+  --putty-edge: #8a6440;
+  --cap: #d4672a;
+  --cap-hi: #e98a45;
+  --ink: #4a2f1c;
+  --brass: #c99a5b;
+  --face-hi: #33220f;
+  --face-lo: #120b06;
+  --glow: #ffb347;
+  --glow-rgb: 255, 179, 71;
+
+  position: fixed;
+  inset: 0;
+  opacity: var(--op, 1);
+  transition: opacity 0.25s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  font-family: "Avenir Next", "Futura", "Helvetica Neue", system-ui, sans-serif;
+}
+.clock-root:hover { opacity: 1; }
+
+.stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 240px;
+  height: 300px;
+  transform-origin: 0 0;
+}
+
+/* ── phases: same object, different glow ─────────────────────────────── */
+.phase-short_break { --glow: #7fe3cf; --glow-rgb: 127, 227, 207; --face-hi: #0f2a26; --face-lo: #06110f; }
+.phase-long_break  { --glow: #c3b0ff; --glow-rgb: 195, 176, 255; --face-hi: #221a35; --face-lo: #0b0814; }
+
+/* ── body ─────────────────────────────────────────────────────────────── */
+.casing {
+  position: absolute;
+  border-radius: 30px;
+  background:
+    radial-gradient(120% 60% at 30% 0%, rgba(255, 255, 255, 0.35), transparent 60%),
+    linear-gradient(180deg, var(--putty-hi), var(--putty-lo));
+  box-shadow:
+    inset 0 -3px 0 rgba(120, 84, 50, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 0 0 1px rgba(90, 58, 34, 0.35),
+    0 3px 0 var(--putty-edge),
+    0 9px 16px rgba(30, 15, 5, 0.35);
+  overflow: hidden;
+}
+
+.layout-large .casing { left: 10px; top: 6px; width: 220px; height: 276px; }
+
+.feet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 281px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 46px;
+}
+.feet i {
+  width: 30px;
+  height: 11px;
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(#3a2416, #1e120a);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* ── top band ─────────────────────────────────────────────────────────── */
+.cap {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 16px;
+  background: linear-gradient(180deg, var(--cap-hi), var(--cap));
+  box-shadow: inset 0 -1px 0 rgba(80, 30, 5, 0.35), 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.lamp {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6d3a1b;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.5);
+  flex: none;
+}
+.run-running .lamp {
+  background: #fff3c9;
+  box-shadow: 0 0 6px 1px rgba(255, 236, 170, 0.9);
+}
+.run-paused .lamp {
+  background: #fff3c9;
+  animation: lamp-pulse 1.6s ease-in-out infinite;
+}
+@keyframes lamp-pulse { 50% { opacity: 0.25; } }
+
+.brand {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 10.5px;
+  letter-spacing: 2.5px;
+  color: #fff4e2;
+  text-shadow: 0 1px 0 rgba(90, 30, 0, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.cap-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: #fff4e2;
+  background: rgba(70, 25, 0, 0.18);
+  box-shadow: inset 0 1px 2px rgba(60, 20, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cap-btn:hover { background: rgba(70, 25, 0, 0.32); }
+.cap-btn:active { transform: translateY(0.5px); }
+
+/* ── dial ─────────────────────────────────────────────────────────────── */
+.dial-slot { position: absolute; }
+.layout-large .dial-slot { left: 27px; top: 38px; }
+.well {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 166px;
+  height: 166px;
+  transform-origin: 0 0;
+  border-radius: 50%;
+  box-shadow: 0 2px 0 rgba(255, 255, 255, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+.dial {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 2px rgba(40, 20, 5, 0.35));
+}
+.tick { stroke: rgba(var(--glow-rgb), 0.28); stroke-width: 1.2; }
+.tick.major { stroke: rgba(var(--glow-rgb), 0.75); stroke-width: 2.2; }
+.arc-track { fill: none; stroke: rgba(var(--glow-rgb), 0.1); stroke-width: 3.5; }
+.arc {
+  fill: none;
+  stroke: var(--glow);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px rgba(var(--glow-rgb), 0.85));
+  transition: stroke-dasharray 0.45s cubic-bezier(0.3, 1.6, 0.5, 1), stroke 0.6s;
+}
+.bead {
+  transform-origin: 100px 100px;
+  transform-box: view-box;
+  transition: transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.bead-dot {
+  fill: #f6dca5;
+  stroke: #6b4a2a;
+  stroke-width: 1.2;
+}
+
+.readout {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding-top: 4px;
+}
+.plate {
+  font-size: 7.5px;
+  font-weight: 800;
+  letter-spacing: 2.4px;
+  padding: 2px 7px 2px 9px;
+  border-radius: 4px;
+  color: var(--glow);
+  border: 1px solid rgba(var(--glow-rgb), 0.35);
+  text-shadow: 0 0 6px rgba(var(--glow-rgb), 0.7);
+  background: rgba(var(--glow-rgb), 0.06);
+}
+
+.digits {
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  margin: 0;
+  cursor: text;
+  border-radius: 6px;
+  line-height: 0;
+}
+.digits:hover { background: rgba(var(--glow-rgb), 0.06); }
+.sevenseg {
+  height: 34px;
+  width: auto;
+  overflow: visible;
+}
+.seg { fill: rgba(var(--glow-rgb), 0.07); transition: fill 0.12s; }
+.seg.on {
+  fill: var(--glow);
+  filter: drop-shadow(0 0 2.5px rgba(var(--glow-rgb), 0.9));
+}
+.colon.blink { animation: colon-blink 1s steps(1) infinite; }
+@keyframes colon-blink { 50% { opacity: 0.15; } }
+
+.time-edit {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  height: 38px;
+  color: var(--glow);
+}
+.time-edit input {
+  width: 74px;
+  font: 600 26px/1 "SF Mono", Menlo, monospace;
+  text-align: center;
+  color: var(--glow);
+  background: rgba(var(--glow-rgb), 0.08);
+  border: 1px solid rgba(var(--glow-rgb), 0.5);
+  border-radius: 6px;
+  outline: none;
+  padding: 2px 0;
+  text-shadow: 0 0 6px rgba(var(--glow-rgb), 0.7);
+}
+.time-edit span { font-size: 9px; letter-spacing: 1px; opacity: 0.8; }
+.time-edit.bad input { border-color: #ff6b5a; animation: shake 0.25s; }
+@keyframes shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+.sub, .hover-row {
+  height: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.18s ease;
+}
+.sub-label {
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  color: rgba(var(--glow-rgb), 0.85);
+}
+.pips { display: flex; gap: 3px; }
+.pips i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--glow-rgb), 0.6);
+}
+.pips i.full { background: var(--glow); border-color: var(--glow); box-shadow: 0 0 4px rgba(var(--glow-rgb), 0.8); }
+.pips i.live { background: linear-gradient(90deg, var(--glow) 50%, transparent 50%); }
+
+/* Hovering the dial swaps the session line for quick ±time keys (or, on the
+   Small widget, the transport keys). */
+.hover-row {
+  position: absolute;
+  bottom: 40px;
+  opacity: 0;
+  pointer-events: none;
+}
+.well:hover .hover-row { opacity: 1; pointer-events: auto; }
+.well:hover .sub { opacity: 0; }
+.nudge {
+  font: 700 8.5px/1 "Avenir Next", system-ui, sans-serif;
+  letter-spacing: 0.5px;
+  color: var(--glow);
+  background: rgba(var(--glow-rgb), 0.1);
+  border: 1px solid rgba(var(--glow-rgb), 0.45);
+  border-radius: 7px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+.nudge:hover { background: rgba(var(--glow-rgb), 0.22); }
+.nudge:active { transform: translateY(0.5px); }
+
+/* ── task line ────────────────────────────────────────────────────────── */
+.task {
+  height: 18px;
+  display: flex;
+  justify-content: center;
+}
+.layout-large .task { position: absolute; top: 209px; left: 16px; right: 16px; }
+.task-text {
+  max-width: 100%;
+  border: 0;
+  background: none;
+  padding: 0 4px;
+  font: italic 600 10px/18px "Avenir Next", system-ui, sans-serif;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+  border-radius: 4px;
+}
+.task-text:hover { background: rgba(90, 60, 30, 0.08); }
+.task-text.placeholder { color: rgba(74, 47, 28, 0.5); font-weight: 500; }
+.task-mark { font-style: normal; color: var(--cap); margin-right: 4px; }
+.task-input {
+  width: 100%;
+  font: 600 10px/16px "Avenir Next", system-ui, sans-serif;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(138, 100, 64, 0.5);
+  border-radius: 5px;
+  padding: 0 6px;
+  outline: none;
+  text-align: center;
+}
+
+/* ── keys ─────────────────────────────────────────────────────────────── */
+.layout-large .controls { position: absolute; top: 232px; left: 0; right: 0; }
+.controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+}
+.key {
+  border: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.06s, box-shadow 0.06s, filter 0.15s;
+}
+.key:hover { filter: brightness(1.05); }
+.key.small {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--ink);
+  background: linear-gradient(180deg, #fbf3e2, #d9c49d);
+  box-shadow: 0 2px 0 var(--putty-edge), 0 3px 5px rgba(40, 20, 5, 0.25), inset 0 1px 0 #fff;
+}
+.key.main {
+  width: 62px;
+  height: 30px;
+  border-radius: 15px;
+  color: #fff6e6;
+  background: linear-gradient(180deg, var(--cap-hi), var(--cap));
+  box-shadow: 0 3px 0 #8f3d12, 0 4px 7px rgba(60, 20, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.key:active { transform: translateY(2px); }
+.key.small:active { box-shadow: 0 0 0 var(--putty-edge), 0 1px 2px rgba(40, 20, 5, 0.25), inset 0 1px 2px rgba(0, 0, 0, 0.15); }
+.key.main:active { box-shadow: 0 1px 0 #8f3d12, 0 1px 3px rgba(60, 20, 0, 0.35), inset 0 1px 3px rgba(80, 20, 0, 0.3); }
+
+.grip {
+  position: absolute;
+  right: 2px;
+  bottom: 4px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.2s;
+  background:
+    linear-gradient(135deg, transparent 45%, rgba(90, 60, 30, 0.55) 46% 54%, transparent 55%),
+    linear-gradient(135deg, transparent 70%, rgba(90, 60, 30, 0.55) 71% 79%, transparent 80%);
+}
+.clock-root:hover .grip { opacity: 1; }
+.layout-large .grip { right: 6px; bottom: 14px; }
+
+button:focus { outline: none; }
+button:focus-visible { outline: 2px solid rgba(var(--glow-rgb), 0.7); outline-offset: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .arc, .bead { transition: none; }
+  .lamp, .colon.blink { animation: none; }
+}

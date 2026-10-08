@@ -1,0 +1,230 @@
+/* Medium, Small and Pill layouts, plus the Minimal style for all four.
+   Measurements are stage pixels (see LAYOUTS in layouts.tsx). */
+
+/* ── shared bits used outside the Large layout ───────────────────────── */
+.cap-btn.soft {
+  color: var(--ink);
+  background: rgba(90, 60, 30, 0.1);
+  box-shadow: inset 0 1px 1px rgba(60, 30, 10, 0.18);
+}
+.cap-btn.soft:hover { background: rgba(90, 60, 30, 0.18); }
+.grow { flex: 1; }
+
+.controls.mini { gap: 6px; }
+.key.mini {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--glow);
+  background: rgba(var(--glow-rgb), 0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--glow-rgb), 0.45);
+}
+.key.mini.primary {
+  width: 26px;
+  height: 26px;
+  color: #1a100a;
+  background: var(--glow);
+  box-shadow: 0 0 8px rgba(var(--glow-rgb), 0.6);
+}
+.key.mini:active { transform: scale(0.94); }
+
+/* ── Medium: dial left, info right ───────────────────────────────────── */
+.layout-medium .casing { left: 6px; top: 6px; width: 328px; height: 146px; border-radius: 26px; }
+.layout-medium.style-retro .casing::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 6px;
+  background: linear-gradient(180deg, var(--cap-hi), var(--cap));
+}
+.layout-medium .dial-slot { left: 10px; top: 10px; }
+.side {
+  position: absolute;
+  left: 152px;
+  right: 14px;
+  top: 16px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.side-head { display: flex; align-items: center; gap: 7px; }
+.side-head .cap-btn { width: 18px; height: 18px; }
+.side-head .cap-btn + .cap-btn { margin-left: -2px; }
+.plate.chip { font-size: 7px; padding: 3px 7px 3px 8px; }
+.style-retro .plate.chip { background: #24170d; border-color: transparent; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6); }
+.side-meta { display: flex; align-items: center; gap: 6px; padding-left: 1px; }
+.style-retro .side-meta .sub-label { color: rgba(74, 47, 28, 0.7); }
+.style-retro .side-meta .pips i { border-color: rgba(74, 47, 28, 0.5); }
+.style-retro .side-meta .pips i.full { background: var(--cap); border-color: var(--cap); box-shadow: none; }
+.style-retro .side-meta .pips i.live { background: linear-gradient(90deg, var(--cap) 50%, transparent 50%); }
+.layout-medium .task { justify-content: flex-start; margin-left: -4px; }
+.layout-medium .controls { justify-content: flex-start; gap: 10px; padding-bottom: 3px; }
+
+/* ── Small: the dial alone ───────────────────────────────────────────── */
+.layout-small .casing { left: 6px; top: 6px; width: 160px; height: 158px; border-radius: 32px; }
+.layout-small .dial-slot { left: 10px; top: 9px; }
+.corner {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: flex;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+.corner .cap-btn { width: 17px; height: 17px; }
+.casing:hover .corner { opacity: 1; }
+/* With no visible keys, show them whenever the timer is idle. */
+.layout-small .run-idle .hover-row { opacity: 1; pointer-events: auto; }
+.layout-small .run-idle .sub { opacity: 0; }
+
+/* ── Pill: one line, one key ─────────────────────────────────────────── */
+.layout-pill .casing {
+  left: 6px;
+  top: 6px;
+  width: 224px;
+  height: 52px;
+  border-radius: 26px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px 0 14px;
+}
+.layout-pill .lamp { background: #b9a07c; }
+.crt {
+  position: relative;
+  flex: 1;
+  height: 38px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(120% 140% at 40% 20%, var(--face-hi), var(--face-lo));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.65), 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+.crt .digits { padding: 0 4px 3px; }
+.crt .sevenseg { height: 21px; }
+.crt .bar {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(var(--glow-rgb), 0.15);
+}
+.crt .bar i {
+  display: block;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--glow);
+  box-shadow: 0 0 4px rgba(var(--glow-rgb), 0.9);
+  transition: width 0.45s ease;
+}
+.crt .time-edit { height: 30px; }
+.crt .time-edit input { font-size: 17px; width: 50px; padding: 1px 0; }
+.key.main.round { width: 36px; height: 36px; border-radius: 50%; }
+.pill-stack { display: flex; flex-direction: column; gap: 3px; }
+.pill-stack .cap-btn { width: 17px; height: 17px; }
+
+/* ══ Minimal style ═══════════════════════════════════════════════════════
+   Flat, quiet, follows the system light/dark appearance. */
+.style-minimal {
+  --m-surface: rgba(24, 22, 20, 0.9);
+  --m-border: rgba(255, 255, 255, 0.09);
+  --m-text: #f4efe8;
+  --m-muted: rgba(244, 239, 232, 0.5);
+  --m-key: rgba(255, 255, 255, 0.08);
+  --m-key-hover: rgba(255, 255, 255, 0.15);
+  --m-track: rgba(255, 255, 255, 0.09);
+  --m-on-accent: rgba(20, 14, 8, 0.85);
+}
+@media (prefers-color-scheme: light) {
+  .style-minimal {
+    --m-surface: rgba(252, 250, 247, 0.94);
+    --m-border: rgba(0, 0, 0, 0.08);
+    --m-text: #1c1916;
+    --m-muted: rgba(28, 25, 22, 0.5);
+    --m-key: rgba(0, 0, 0, 0.05);
+    --m-key-hover: rgba(0, 0, 0, 0.1);
+    --m-track: rgba(0, 0, 0, 0.08);
+    --m-on-accent: #fff;
+  }
+  .style-minimal .phase-focus { --glow: #e2781c; --glow-rgb: 226, 120, 28; }
+  .style-minimal .phase-short_break { --glow: #13967e; --glow-rgb: 19, 150, 126; }
+  .style-minimal .phase-long_break { --glow: #7356d6; --glow-rgb: 115, 86, 214; }
+}
+
+.style-minimal .casing {
+  color: var(--m-text);
+  background: var(--m-surface);
+  box-shadow: 0 0 0 1px var(--m-border), 0 8px 22px rgba(0, 0, 0, 0.25);
+}
+.style-minimal.layout-large .casing { border-radius: 28px; height: 282px; }
+.style-minimal .feet { display: none; }
+.style-minimal .cap { background: none; box-shadow: none; }
+.style-minimal .brand { color: var(--m-muted); text-shadow: none; font-size: 9px; font-weight: 700; letter-spacing: 3px; }
+.style-minimal .cap-btn,
+.style-minimal .cap-btn.soft { color: var(--m-muted); background: var(--m-key); box-shadow: none; }
+.style-minimal .cap-btn:hover { color: var(--m-text); background: var(--m-key-hover); }
+.style-minimal .lamp,
+.style-minimal.layout-pill .lamp { background: var(--m-track); box-shadow: none; }
+.style-minimal .run-running .lamp { background: var(--glow); box-shadow: 0 0 6px rgba(var(--glow-rgb), 0.7); }
+.style-minimal .run-paused .lamp { background: var(--glow); }
+
+.style-minimal .well { box-shadow: none; }
+.style-minimal .dial { filter: none; }
+.ring-track { fill: none; stroke: var(--m-track); stroke-width: 5; }
+.ring-arc { stroke-width: 5; filter: none; }
+
+.style-minimal .plate,
+.style-minimal .plate.chip { border: 0; background: none; box-shadow: none; text-shadow: none; padding: 0; letter-spacing: 2.6px; color: var(--glow); }
+.mdigits {
+  display: block;
+  font: 300 42px/1 "SF Pro Rounded", "SF Pro Display", -apple-system, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  color: var(--m-text);
+  padding: 0 2px;
+}
+.mdigits.paused { animation: colon-blink 1.6s ease-in-out infinite; }
+.style-minimal .digits:hover { background: var(--m-key); }
+.style-minimal .time-edit,
+.style-minimal .time-edit input { color: var(--m-text); text-shadow: none; }
+.style-minimal .time-edit input { background: var(--m-key); border-color: var(--m-border); font-family: -apple-system, system-ui, sans-serif; font-weight: 400; }
+
+.style-minimal .sub-label,
+.style-minimal .side-meta .sub-label { color: var(--m-muted); }
+.style-minimal .pips i { border-color: var(--m-muted); }
+.style-minimal .pips i.full { background: var(--glow); border-color: var(--glow); box-shadow: none; }
+.style-minimal .pips i.live { background: linear-gradient(90deg, var(--glow) 50%, transparent 50%); }
+
+.style-minimal .nudge { color: var(--m-text); background: var(--m-key); border-color: transparent; }
+.style-minimal .nudge:hover { background: var(--m-key-hover); }
+
+.style-minimal .task-text { color: var(--m-text); font-style: normal; font-weight: 500; }
+.style-minimal .task-text.placeholder { color: var(--m-muted); }
+.style-minimal .task-text:hover { background: var(--m-key); }
+.style-minimal .task-mark { color: var(--glow); }
+.style-minimal .task-input { color: var(--m-text); background: var(--m-key); border-color: var(--m-border); }
+
+.style-minimal .key.small { color: var(--m-text); background: var(--m-key); box-shadow: none; }
+.style-minimal .key.small:hover { background: var(--m-key-hover); filter: none; }
+.style-minimal .key.main { color: var(--m-on-accent); background: var(--glow); box-shadow: none; }
+.style-minimal .key:active { transform: scale(0.95); box-shadow: none; }
+.style-minimal .key.mini { color: var(--m-text); background: var(--m-key); box-shadow: none; }
+.style-minimal .key.mini.primary { color: var(--m-on-accent); background: var(--glow); box-shadow: none; }
+
+.style-minimal.layout-medium .casing::before { display: none; }
+.style-minimal .crt { background: none; box-shadow: none; }
+.style-minimal .crt .mdigits { font-size: 27px; font-weight: 400; }
+.style-minimal .crt .bar { background: var(--m-track); }
+.style-minimal .crt .bar i { box-shadow: none; }
+.style-minimal .grip {
+  background:
+    linear-gradient(135deg, transparent 45%, var(--m-muted) 46% 54%, transparent 55%),
+    linear-gradient(135deg, transparent 70%, var(--m-muted) 71% 79%, transparent 80%);
+}
