@@ -147,7 +147,7 @@ export function SettingsView() {
       </section>
 
       <section className="card">
-        <h3>Distractions & reflection</h3>
+        <h3>Distractions, reflection & nudges</h3>
         <Row label="Log a distraction">
           <ShortcutRecorder value={settings.distractionShortcut} onChange={(v) => save({ distractionShortcut: v }, true)} />
         </Row>
@@ -157,6 +157,12 @@ export function SettingsView() {
           hint="“How productive was it?” with an optional goal check. Always skippable."
           checked={settings.reflection}
           onChange={(v) => save({ reflection: v }, true)}
+        />
+        <Toggle
+          label="Occasional companion messages"
+          hint="A rare line on the clock, e.g. after a long run without a break. At most one every 90 minutes."
+          checked={settings.companion}
+          onChange={(v) => save({ companion: v }, true)}
         />
         <Toggle
           label="Notifications"

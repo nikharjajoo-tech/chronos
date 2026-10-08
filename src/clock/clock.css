@@ -327,6 +327,7 @@ html.clock-window body {
   color: var(--cap);
   background: rgba(212, 103, 42, 0.12);
 }
+.task-text.companion { color: var(--ink); font-style: italic; }
 .task-text.away { color: #9a4a1b; font-style: normal; animation: lamp-pulse 2.4s ease-in-out infinite; }
 .task-input {
   width: 100%;

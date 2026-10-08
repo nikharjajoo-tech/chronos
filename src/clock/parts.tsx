@@ -211,6 +211,16 @@ export function TaskLine({ m }: { m: Model }) {
     );
   }
 
+  if (snap.companion && snap.run === "idle") {
+    return (
+      <div className="task">
+        <button className="task-text companion" title={snap.companion} onClick={() => m.setEditing("task")}>
+          {snap.companion}
+        </button>
+      </div>
+    );
+  }
+
   let text: string;
   let cls = "task-text";
   if (snap.phase === "short_break") text = snap.run === "idle" ? "Nice work. Take five?" : "Breathe. Back soon.";

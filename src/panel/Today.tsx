@@ -27,10 +27,17 @@ export function Today() {
             <div className="eyebrow">Today · {date}</div>
             <div className="hero-figure">{fmtDuration(liveFocus)}</div>
             <div className="hero-caption">focused{goal > 0 && <> of {fmtDuration(goal)} goal</>}</div>
-            <div className="streak-chip" title={`Best: ${stats.streak.best} days`}>
-              {stats.streak.current > 0
-                ? `🔥 ${stats.streak.current}-day streak${stats.streak.todayDone ? "" : " · finish a session today to keep it"}`
-                : "Finish a session to start a streak"}
+            <div className="chips-row">
+              <div className="streak-chip" title={`Best: ${stats.streak.best} days`}>
+                {stats.streak.current > 0
+                  ? `🔥 ${stats.streak.current}-day streak${stats.streak.todayDone ? "" : " · finish a session today to keep it"}`
+                  : "Finish a session to start a streak"}
+              </div>
+              {stats.weekScore !== null && (
+                <a className="streak-chip score-chip" href="#insights" title="See what makes up the score">
+                  Week score {stats.weekScore}
+                </a>
+              )}
             </div>
           </div>
           <NowBadge snap={snap} now={now} />

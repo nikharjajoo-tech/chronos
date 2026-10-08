@@ -86,6 +86,8 @@ pub struct Settings {
     /// Ask "how did it go?" after a focus session.
     pub reflection: bool,
     pub notifications: bool,
+    /// Occasional one-line nudges on the clock ("take a proper break").
+    pub companion: bool,
 
     pub sound: bool,
     pub volume: f64,
@@ -121,6 +123,7 @@ impl Default for Settings {
             distraction_shortcut: "Control+Alt+D".into(),
             reflection: true,
             notifications: true,
+            companion: true,
             sound: true,
             volume: 0.6,
             daily_goal_min: 180,

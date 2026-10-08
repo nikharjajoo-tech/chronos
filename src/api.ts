@@ -3,7 +3,7 @@
 // screenshotted without the desktop shell. Mock state is seeded from the URL,
 // e.g. ?view=clock&phase=focus&run=running&remaining=1122&task=Write
 
-import type { Action, AppInfo, HelperStatus, PeriodStats, Quick, Settings, Snapshot, TodayStats } from "./types";
+import type { Action, AppInfo, HelperStatus, InsightsView, PeriodStats, Quick, Settings, Snapshot, TodayStats } from "./types";
 import { MINUTE } from "./format";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
@@ -16,6 +16,8 @@ export interface Backend {
   todayStats(): Promise<TodayStats>;
   periodStats(kind: "week" | "month", offset: number): Promise<PeriodStats>;
   recentProjects(): Promise<string[]>;
+  insights(): Promise<InsightsView>;
+  respondSuggestion(id: string, accept: boolean): Promise<InsightsView>;
   logDistraction(): Promise<void>;
   setDistractionCategory(id: number, category: string | null): Promise<void>;
   rateSession(id: number, rating: number | null, goal: string | null): Promise<void>;
@@ -28,7 +30,7 @@ export interface Backend {
   getSettings(): Promise<Settings>;
   setSettings(s: Settings): Promise<{ settings: Settings; shortcutError: string | null }>;
   toggleClock(): Promise<void>;
-  openPanel(tab?: "today" | "history" | "settings"): Promise<void>;
+  openPanel(tab?: "today" | "history" | "insights" | "settings"): Promise<void>;
   showClockMenu(): Promise<void>;
   setClockScale(scale: number): Promise<void>;
   testSound(): Promise<void>;
@@ -71,6 +73,8 @@ function tauriBackend(): Backend {
     todayStats: () => invoke("today_stats"),
     periodStats: (kind, offset) => invoke("period_stats", { kind, offset }),
     recentProjects: () => invoke("recent_projects"),
+    insights: () => invoke("insights"),
+    respondSuggestion: (id, accept) => invoke("respond_suggestion", { id, accept }),
     logDistraction: () => invoke("log_distraction"),
     setDistractionCategory: (id, category) => invoke("set_distraction_category", { id, category }),
     rateSession: (id, rating, goal) => invoke("rate_session", { id, rating, goal }),
@@ -109,7 +113,7 @@ function mockBackend(): Backend {
     widget: (q.get("widget") as Settings["widget"]) ?? "large", style: (q.get("style") as Settings["style"]) ?? "retro",
     scale: 1, launchAtLogin: true, showInDock: false,
     awayMin: 5, autoHide: true, autoHideApps: ["CptHost", "screencaptureui", "obs"], dnd: false,
-    menuBarTimer: "off", distractionShortcut: "Control+Alt+D", reflection: true, notifications: true,
+    menuBarTimer: "off", distractionShortcut: "Control+Alt+D", reflection: true, notifications: true, companion: true,
     sound: true, volume: 0.6, dailyGoalMin: 180,
   };
   const phase = (q.get("phase") as Snapshot["phase"]) ?? "focus";
@@ -121,7 +125,7 @@ function mockBackend(): Backend {
     endAt: run === "running" ? now() + remaining : null,
     cycle: +(q.get("cycle") ?? 2), longEvery: 4, task: q.get("task"), project: q.get("project"), preset: "standard",
     sessionNumber: 3, completedToday: 2, focusMsToday: 52 * MINUTE, goalMs: 180 * MINUTE,
-    distractionsToday: 3, awayMs: q.has("away") ? +q.get("away")! * MINUTE : null,
+    distractionsToday: 3, awayMs: q.has("away") ? +q.get("away")! * MINUTE : null, companion: q.get("companion"),
     hidden: false, now: now(),
   };
   const subs = new Set<(s: Snapshot) => void>();
@@ -230,7 +234,10 @@ function mockBackend(): Backend {
       distractions: 3, streak: { current: 4, best: 9, todayDone: true },
       projects: [{ name: "job-search", value: 72 * MINUTE }, { name: "portfolio", value: 50 * MINUTE }, { name: "", value: 12 * MINUTE }],
       distractionList: [distraction(1, 9, 50, "phone"), distraction(2, 14, 20, "youtube"), distraction(3, 14, 31, null)],
+      weekScore: 78,
     }),
+    insights: async () => mockInsights(day.getTime(), q.has("empty")),
+    respondSuggestion: async () => ({ ...mockInsights(day.getTime(), false), suggestion: null }),
     periodStats: async (kind, offset) => period(kind, offset),
     recentProjects: async () => ["job-search", "portfolio"],
     logDistraction: async () => {},
@@ -269,6 +276,42 @@ function mockBackend(): Backend {
       return () => settingSubs.delete(cb);
     },
     onTab: () => () => {},
+  };
+}
+
+function mockInsights(today: number, empty: boolean): InsightsView {
+  const week = 7 * 86_400_000;
+  const trend = [52, 58, null, 61, 66, 64, 71, 78].map((value, i) => ({ start: today - (7 - i) * week, value }));
+  if (empty) return { score: null, previous: null, mover: null, trend: trend.map((t) => ({ ...t, value: null })), insights: [], suggestion: null, sample: 2 };
+  const part = (key: string, label: string, points: number, max: number, detail: string) => ({ key, label, points, max, detail });
+  return {
+    score: {
+      value: 78,
+      parts: [
+        part("focus", "Focus time", 18.3, 25, "2h 12m/day of 3h goal"),
+        part("consistency", "Consistency", 20, 20, "4 of 4 days"),
+        part("completion", "Finishing sessions", 17.4, 20, "13 of 15 finished"),
+        part("distractions", "Staying on task", 9.4, 15, "1.5 distractions per focus hour"),
+        part("breaks", "Taking breaks", 6.4, 10, "7 of 11 breaks taken"),
+        part("quality", "Session quality", 7.3, 10, "avg rating 3.2 / 4"),
+      ],
+    },
+    previous: { value: 69, parts: [] },
+    mover: ["Consistency", 6],
+    trend,
+    insights: [
+      { id: "best-window", text: "You finish 27% more of your sessions when you start between 9 AM and 12 PM.", evidence: "92% vs 72% finished · 14 sessions in that window" },
+      { id: "abandon-point", text: "When you stop a session early, it's usually around minute 38.", evidence: "median of 6 sessions ended early" },
+      { id: "distraction-peak", text: "Your distractions peak between 2 PM and 4 PM.", evidence: "41% of 22 logged distractions" },
+      { id: "length-trend", text: "Your average session grew from 31 to 42 minutes.", evidence: "last 2 weeks (18 sessions) vs the 2 before (15)" },
+    ],
+    suggestion: {
+      id: "focus:25->30",
+      text: "You've finished nearly every 25-minute session this week. Ready to try 30 minutes?",
+      evidence: "12 of 13 finished",
+      action: { label: "Switch to 30 min", setting: "focusMin", value: 30 },
+    },
+    sample: 41,
   };
 }
 

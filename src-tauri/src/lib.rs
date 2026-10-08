@@ -3,6 +3,7 @@ pub mod commands;
 pub mod companion;
 pub mod db;
 pub mod engine;
+pub mod insights;
 pub mod settings;
 pub mod shell;
 pub mod sysmac;
@@ -31,6 +32,8 @@ pub fn run() {
             commands::act,
             commands::today_stats,
             commands::period_stats,
+            commands::insights,
+            commands::respond_suggestion,
             commands::recent_projects,
             commands::log_distraction,
             commands::set_distraction_category,

@@ -24,6 +24,8 @@ export interface Snapshot {
   distractionsToday: number;
   /** Set when focus was auto-paused because you stepped away. */
   awayMs: number | null;
+  /** A rare one-line nudge after a session ends. */
+  companion: string | null;
   hidden: boolean;
   now: number;
 }
@@ -65,6 +67,7 @@ export interface Settings {
   distractionShortcut: string;
   reflection: boolean;
   notifications: boolean;
+  companion: boolean;
   sound: boolean;
   volume: number;
   dailyGoalMin: number;
@@ -108,6 +111,43 @@ export interface TodayStats extends DayStats {
   streak: Streak;
   projects: Named[];
   distractionList: DistractionRow[];
+  weekScore: number | null;
+}
+
+export interface ScorePart {
+  key: string;
+  label: string;
+  points: number;
+  max: number;
+  detail: string;
+}
+
+export interface Score {
+  value: number;
+  parts: ScorePart[];
+}
+
+export interface Insight {
+  id: string;
+  text: string;
+  evidence: string;
+}
+
+export interface Suggestion {
+  id: string;
+  text: string;
+  evidence: string;
+  action: { label: string; setting: string; value: unknown } | null;
+}
+
+export interface InsightsView {
+  score: Score | null;
+  previous: Score | null;
+  mover: [string, number] | null;
+  trend: { start: number; value: number | null }[];
+  insights: Insight[];
+  suggestion: Suggestion | null;
+  sample: number;
 }
 
 export interface DayAgg {

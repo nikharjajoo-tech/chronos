@@ -86,11 +86,17 @@ Settings, which also has a size slider (60–200%).
 - History by week or month: focus time, average per day, completion rate, average session, distractions, consistency, streak, average rating. Each is compared with the same days of the previous period.
 - Per-day bars, best focus hours, distraction peaks, and breakdowns by project and by distraction reason
 
+**Coaching** (Insights tab)
+- **Weekly score (0–100)** from focus time vs goal, consistency, finishing sessions, distractions per focus hour, taking breaks, and session ratings. Each part shows its evidence, the change vs the same days last week, and which part moved it most, plus an 8-week trend.
+- **Insights** drawn from the last 4 weeks: best start window, where sessions get abandoned, distraction peak and main reason, session-length trend, strongest weekday, and ratings vs length. Each one only appears with enough data, and shows what it's based on.
+- **One suggestion at a time** (longer or shorter sessions, Do Not Disturb, auto-start breaks, protect your best hours), with one-click apply. Declined suggestions never come back.
+- **Companion lines** on the clock after a session, at most one every 90 minutes: daily goal hit, a long run without a real break, or skipped breaks.
+
 ## Tests
 
 ```bash
 npm test           # frontend: formatting, parsing, shortcut capture
-npm run test:rust  # timer, away pauses, database, analytics, streaks, engine lifecycle, crash recovery
+npm run test:rust  # timer, away pauses, database, analytics, score, insights, suggestions, companion, crash recovery
 ```
 
 ## Privacy

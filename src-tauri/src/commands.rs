@@ -3,7 +3,7 @@
 
 use crate::analytics::PeriodStats;
 use crate::companion::{self, Quick};
-use crate::engine::{now_ms, Action, Snapshot, TodayStats};
+use crate::engine::{now_ms, Action, InsightsView, Snapshot, TodayStats};
 use crate::sysmac;
 use crate::settings::Settings;
 use crate::shell::{self, AppState, CLOCK};
@@ -38,6 +38,28 @@ pub fn today_stats(state: State<AppState>) -> TodayStats {
 #[tauri::command]
 pub fn period_stats(state: State<AppState>, kind: String, offset: i32) -> PeriodStats {
     engine(&state).period(&kind, offset, now_ms())
+}
+
+#[tauri::command]
+pub fn insights(state: State<AppState>) -> InsightsView {
+    engine(&state).insights_view(now_ms())
+}
+
+/// Accept or decline the current suggestion; returns the refreshed view.
+#[tauri::command]
+pub fn respond_suggestion(app: AppHandle, state: State<AppState>, id: String, accept: bool) -> InsightsView {
+    let (changed, view, snap, settings) = {
+        let mut e = engine(&state);
+        let now = now_ms();
+        let changed = e.respond_suggestion(&id, accept, now);
+        (changed, e.insights_view(now), e.snapshot(now), e.settings.clone())
+    };
+    if changed {
+        shell::apply_window_settings(&app, &settings);
+        shell::broadcast(&app, &snap);
+        shell::emit_settings(&app);
+    }
+    view
 }
 
 #[tauri::command]
