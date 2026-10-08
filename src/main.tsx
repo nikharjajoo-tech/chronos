@@ -7,13 +7,17 @@ import { Quick } from "./quick/Quick";
 
 const view = api.view();
 document.documentElement.classList.add(`${view}-window`);
+const previewParams = new URLSearchParams(location.search);
 if (!isTauri && view !== "panel") {
-  // Browser preview: put the transparent clock on a desk-coloured backdrop.
-  document.body.style.background = "linear-gradient(135deg, #55657a, #2f3a49)";
+  // Browser preview: put the transparent clock on a desk-coloured backdrop
+  // (unless embedded with ?bare, e.g. in the README showcase).
+  if (!previewParams.has("bare")) document.body.style.background = "linear-gradient(135deg, #55657a, #2f3a49)";
+  // Embedded stills: no transitions, so a screenshot never catches a digit mid-fade.
+  else document.head.insertAdjacentHTML("beforeend", "<style>*,*::before,*::after{transition:none!important;animation:none!important}</style>");
   if (view === "quick") {
     // Pin the preview to the popup's real window size (headless Chrome won't go that narrow).
     const root = document.getElementById("root")!;
-    root.style.cssText = `position:relative;width:330px;height:${new URLSearchParams(location.search).get("quick") === "reflection" ? 186 : 146}px`;
+    root.style.cssText = `position:relative;width:330px;height:${previewParams.get("quick") === "reflection" ? 186 : 146}px`;
   }
 }
 
