@@ -15,11 +15,15 @@ export interface Snapshot {
   cycle: number;
   longEvery: number;
   task: string | null;
+  project: string | null;
   preset: string;
   sessionNumber: number;
   completedToday: number;
   focusMsToday: number;
   goalMs: number;
+  distractionsToday: number;
+  /** Set when focus was auto-paused because you stepped away. */
+  awayMs: number | null;
   hidden: boolean;
   now: number;
 }
@@ -53,6 +57,14 @@ export interface Settings {
   scale: number;
   launchAtLogin: boolean;
   showInDock: boolean;
+  awayMin: number;
+  autoHide: boolean;
+  autoHideApps: string[];
+  dnd: boolean;
+  menuBarTimer: "off" | "hidden" | "always";
+  distractionShortcut: string;
+  reflection: boolean;
+  notifications: boolean;
   sound: boolean;
   volume: number;
   dailyGoalMin: number;
@@ -67,8 +79,94 @@ export interface SessionRow {
   plannedMs: number;
   actualMs: number;
   pauseCount: number;
+  awayCount: number;
   task: string | null;
+  project: string | null;
+  rating: number | null;
+  goalCompleted: "yes" | "partial" | "no" | null;
 }
+
+export interface DistractionRow {
+  id: number;
+  at: number;
+  category: string | null;
+  sessionId: number | null;
+}
+
+export interface Named {
+  name: string;
+  value: number;
+}
+
+export interface Streak {
+  current: number;
+  best: number;
+  todayDone: boolean;
+}
+
+export interface TodayStats extends DayStats {
+  streak: Streak;
+  projects: Named[];
+  distractionList: DistractionRow[];
+}
+
+export interface DayAgg {
+  start: number;
+  focusMs: number;
+  completed: number;
+  abandoned: number;
+  distractions: number;
+  future: boolean;
+}
+
+export interface Totals {
+  focusMs: number;
+  focusSessions: number;
+  completed: number;
+  abandoned: number;
+  distractions: number;
+  completionRate: number;
+  avgSessionMs: number;
+  avgDailyFocusMs: number;
+  activeDays: number;
+  elapsedDays: number;
+  consistency: number;
+  bestDay: number | null;
+  bestDayMs: number;
+  avgRating: number | null;
+}
+
+export interface PeriodStats {
+  from: number;
+  to: number;
+  days: DayAgg[];
+  totals: Totals;
+  previous: Totals;
+  projects: Named[];
+  categories: Named[];
+  focusByHour: number[];
+  distractionsByHour: number[];
+  streak: Streak;
+}
+
+export type Quick =
+  | { kind: "distraction"; id: number; countToday: number; sessionNumber: number | null }
+  | { kind: "reflection"; sessionId: number; minutes: number; task: string | null; project: string | null };
+
+export interface HelperStatus {
+  dndInstalled: boolean;
+  running: string[];
+}
+
+export const DISTRACTION_CATEGORIES: { id: string; label: string; short: string; key: string }[] = [
+  { id: "social", label: "Social media", short: "Social", key: "1" },
+  { id: "youtube", label: "YouTube", short: "YouTube", key: "2" },
+  { id: "phone", label: "Phone", short: "Phone", key: "3" },
+  { id: "messaging", label: "Messaging", short: "Messages", key: "4" },
+  { id: "browsing", label: "Browsing", short: "Browsing", key: "5" },
+  { id: "work", label: "Work-related", short: "Work", key: "6" },
+  { id: "other", label: "Other", short: "Other", key: "7" },
+];
 
 export interface DayStats {
   focusSessions: number;
@@ -82,6 +180,7 @@ export interface DayStats {
   currentStreak: number;
   firstStart: number | null;
   lastEnd: number | null;
+  distractions: number;
   sessions: SessionRow[];
 }
 

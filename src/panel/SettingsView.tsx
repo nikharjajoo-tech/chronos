@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { prettyShortcut, shortcutFromEvent } from "../format";
 import { useSettings } from "../hooks";
-import type { AppInfo, Settings, Widget } from "../types";
+import type { AppInfo, HelperStatus, Settings, Widget } from "../types";
 
 const PRESETS = [
   { id: "standard", label: "Standard", sub: "25 / 5" },
@@ -18,14 +18,34 @@ const WIDGETS: { id: Widget; label: string; hint: string }[] = [
 ];
 const isMac = navigator.platform.toLowerCase().includes("mac");
 
+/** Friendly names for the built-in auto-hide process names. */
+const KNOWN_APPS: Record<string, string> = {
+  cpthost: "Zoom screen sharing",
+  screencaptureui: "macOS screenshot & recording (⌘⇧5)",
+  obs: "OBS Studio",
+};
+const AWAY_OPTIONS = [0, 3, 5, 10, 15, 20];
+
 export function SettingsView() {
   const [settings, setLocal] = useSettings();
   const [shortcutError, setShortcutError] = useState<string | null>(null);
   const [info, setInfo] = useState<AppInfo | null>(null);
   const pending = useRef<number>(0);
 
+  const [helpers, setHelpers] = useState<HelperStatus | null>(null);
+  const [dndMsg, setDndMsg] = useState<string | null>(null);
+
   useEffect(() => {
     api.appInfo().then(setInfo);
+    const refresh = () => api.helperStatus().then(setHelpers);
+    refresh();
+    // Coming back from the Shortcuts app re-checks whether they were added.
+    window.addEventListener("focus", refresh);
+    const id = window.setInterval(refresh, 5000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      clearInterval(id);
+    };
   }, []);
 
   if (!settings) return <div className="empty">Loading…</div>;
@@ -86,6 +106,67 @@ export function SettingsView() {
       </section>
 
       <section className="card">
+        <h3>Focus helpers</h3>
+        <Row label="Pause when I step away">
+          <select value={settings.awayMin} onChange={(e) => save({ awayMin: +e.target.value }, true)}>
+            {AWAY_OPTIONS.map((m) => (
+              <option key={m} value={m}>
+                {m === 0 ? "Never" : `after ${m} min idle`}
+              </option>
+            ))}
+          </select>
+        </Row>
+        <p className="note">
+          With no keyboard or mouse activity (or the lid closed), the focus session pauses as of the moment you left, so time away
+          never counts as focus. Reading or watching without touching anything counts as idle too, so pick a longer time if needed.
+        </p>
+        <Toggle
+          label="Do Not Disturb during focus"
+          hint="On while a focus session runs, off on breaks and pauses."
+          checked={settings.dnd}
+          onChange={(v) => save({ dnd: v }, true)}
+        />
+        {settings.dnd && helpers && !helpers.dndInstalled && (
+          <div className="row">
+            <label className="muted">Needs two shortcuts in the Shortcuts app</label>
+            <div className="row-controls">
+              <button
+                className="ghost"
+                onClick={() => {
+                  setDndMsg("Click “Add Shortcut” in both windows that open…");
+                  api.installDndShortcuts().catch((e) => setDndMsg(String(e)));
+                }}
+              >
+                Install shortcuts
+              </button>
+            </div>
+          </div>
+        )}
+        {settings.dnd && helpers?.dndInstalled && <p className="note status-ok">✓ “Chronos Focus On” and “Chronos Focus Off” are installed.</p>}
+        {settings.dnd && dndMsg && !helpers?.dndInstalled && <p className="note">{dndMsg}</p>}
+      </section>
+
+      <section className="card">
+        <h3>Distractions & reflection</h3>
+        <Row label="Log a distraction">
+          <ShortcutRecorder value={settings.distractionShortcut} onChange={(v) => save({ distractionShortcut: v }, true)} />
+        </Row>
+        <p className="note">Works from any app. Logs the moment instantly; picking a reason is optional (keys 1–7).</p>
+        <Toggle
+          label="Quick reflection after focus sessions"
+          hint="“How productive was it?” with an optional goal check. Always skippable."
+          checked={settings.reflection}
+          onChange={(v) => save({ reflection: v }, true)}
+        />
+        <Toggle
+          label="Notifications"
+          hint="When a session ends or is paused while you're away."
+          checked={settings.notifications}
+          onChange={(v) => save({ notifications: v }, true)}
+        />
+      </section>
+
+      <section className="card">
         <h3>Widget</h3>
         <div className="widget-picker">
           {WIDGETS.map((w) => (
@@ -113,6 +194,21 @@ export function SettingsView() {
         <h3>Clock</h3>
         <Toggle label="Always on top" checked={settings.alwaysOnTop} onChange={(v) => save({ alwaysOnTop: v }, true)} />
         <Toggle label="Show on every desktop (Space)" checked={settings.allWorkspaces} onChange={(v) => save({ allWorkspaces: v }, true)} />
+        <Row label="Countdown in menu bar">
+          <div className="chips">
+            {(
+              [
+                ["off", "Off"],
+                ["hidden", "When hidden"],
+                ["always", "Always"],
+              ] as const
+            ).map(([v, l]) => (
+              <button key={v} className={settings.menuBarTimer === v ? "on" : ""} onClick={() => save({ menuBarTimer: v }, true)}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </Row>
         <Row label="Opacity">
           <input
             type="range"
@@ -135,6 +231,19 @@ export function SettingsView() {
           <ShortcutRecorder value={settings.hideShortcut} onChange={(v) => save({ hideShortcut: v }, true)} />
         </Row>
         {shortcutError && <p className="error">{shortcutError}</p>}
+        <Toggle
+          label="Hide automatically while sharing or recording"
+          hint="Hides when any app below is running, and comes back when it quits."
+          checked={settings.autoHide}
+          onChange={(v) => save({ autoHide: v }, true)}
+        />
+        {settings.autoHide && (
+          <AppList
+            apps={settings.autoHideApps}
+            running={helpers?.running ?? []}
+            onChange={(autoHideApps) => save({ autoHideApps }, true)}
+          />
+        )}
         <Toggle
           label="Invisible in screenshots & screen recordings"
           hint="You still see the clock; captures don't. Some newer recorders ignore this, so use Hide when it matters."
@@ -199,6 +308,46 @@ export function SettingsView() {
         {info && <p className="note muted">Chronos {info.version}</p>}
       </section>
     </div>
+  );
+}
+
+function AppList({ apps, running, onChange }: { apps: string[]; running: string[]; onChange: (apps: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const name = draft.trim();
+    if (name && !apps.some((a) => a.toLowerCase() === name.toLowerCase())) onChange([...apps, name]);
+    setDraft("");
+  };
+  return (
+    <>
+      <div className="app-list">
+        {apps.map((a) => {
+          const live = running.some((r) => r.toLowerCase() === a.toLowerCase());
+          return (
+            <span key={a} className={live ? "app-chip live" : "app-chip"} title={live ? "Running now" : a}>
+              {KNOWN_APPS[a.toLowerCase()] ?? a}
+              {live && " ●"}
+              <button onClick={() => onChange(apps.filter((x) => x !== a))} aria-label={`Remove ${a}`}>
+                ×
+              </button>
+            </span>
+          );
+        })}
+      </div>
+      <div className="row">
+        <label className="muted">Add an app (e.g. Keynote, Microsoft Teams)</label>
+        <div className="row-controls app-add">
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="App name" />
+          <button className="ghost" onClick={add} disabled={!draft.trim()}>
+            Add
+          </button>
+        </div>
+      </div>
+      <p className="note">
+        Browser-based calls (Google Meet in Chrome) can't be detected, so use the hide shortcut or turn on “Invisible in screenshots &
+        recordings” for those.
+      </p>
+    </>
   );
 }
 

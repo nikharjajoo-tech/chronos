@@ -1,10 +1,12 @@
 //! Glue between the pure timer, settings and the database. Tauri-free so the
 //! whole session lifecycle can be tested headless.
 
-use crate::db::{DayStats, Db};
+use crate::analytics::{self, Named, PeriodStats, Streak};
+use crate::db::{DayStats, Db, DistractionRow};
 use crate::settings::Settings;
 use crate::timer::{EndStatus, Finished, Phase, RunState, Timer};
-use chrono::{Duration, Local, NaiveTime, TimeZone};
+use chrono::{Duration, Local, NaiveDate, NaiveTime, TimeZone, Timelike};
+use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 
 const K_SETTINGS: &str = "settings";
@@ -36,13 +38,37 @@ pub struct Snapshot {
     pub cycle: u32,
     pub long_every: u32,
     pub task: Option<String>,
+    pub project: Option<String>,
     pub preset: String,
     pub session_number: u32,
     pub completed_today: u32,
     pub focus_ms_today: i64,
     pub goal_ms: i64,
+    pub distractions_today: u32,
+    /// Set when focus was auto-paused because you stepped away: how long.
+    pub away_ms: Option<i64>,
     pub hidden: bool,
     pub now: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodayStats {
+    #[serde(flatten)]
+    pub day: DayStats,
+    pub streak: Streak,
+    pub projects: Vec<Named>,
+    pub distraction_list: Vec<DistractionRow>,
+}
+
+/// A logged distraction, for the quick popup.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoggedDistraction {
+    pub id: i64,
+    pub at: i64,
+    pub count_today: u32,
+    pub session_number: Option<u32>,
 }
 
 pub struct Engine {
@@ -50,24 +76,69 @@ pub struct Engine {
     pub settings: Settings,
     pub db: Db,
     pub hidden: bool,
+    pub away_notice: Option<i64>,
 }
 
 pub fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-/// [start, end) of the local calendar day containing `now`, DST-safe.
+pub fn local_date(t: i64) -> NaiveDate {
+    Local.timestamp_millis_opt(t).single().unwrap_or_else(Local::now).date_naive()
+}
+
+/// Local midnight at the start of `d`, DST-safe.
+pub fn local_midnight(d: NaiveDate) -> i64 {
+    Local
+        .from_local_datetime(&d.and_time(NaiveTime::MIN))
+        .earliest()
+        .map(|t| t.timestamp_millis())
+        .unwrap_or_else(|| d.and_time(NaiveTime::MIN).and_utc().timestamp_millis())
+}
+
+fn local_hour(t: i64) -> usize {
+    Local.timestamp_millis_opt(t).single().map(|d| d.hour() as usize).unwrap_or(0)
+}
+
+/// [start, end) of the local calendar day containing `now`.
 pub fn day_bounds(now: i64) -> (i64, i64) {
-    let local = Local.timestamp_millis_opt(now).single().unwrap_or_else(Local::now);
-    let midnight = |d: chrono::NaiveDate| {
-        Local
-            .from_local_datetime(&d.and_time(NaiveTime::MIN))
-            .earliest()
-            .map(|t| t.timestamp_millis())
-            .unwrap_or(now)
-    };
-    let day = local.date_naive();
-    (midnight(day), midnight(day + Duration::days(1)))
+    let day = local_date(now);
+    (local_midnight(day), local_midnight(day + Duration::days(1)))
+}
+
+fn days_between(first: NaiveDate, next: NaiveDate) -> Vec<(i64, i64)> {
+    let mut out = Vec::new();
+    let mut d = first;
+    while d < next {
+        out.push((local_midnight(d), local_midnight(d + Duration::days(1))));
+        d += Duration::days(1);
+    }
+    out
+}
+
+/// "Finish resume #job-search" → (Some("Finish resume"), Some("job-search")).
+/// The first #tag is the project; tags are lower-cased so #CV and #cv match.
+pub fn split_project(text: &str) -> (Option<String>, Option<String>) {
+    let mut project: Option<String> = None;
+    let mut words = Vec::new();
+    for w in text.split_whitespace() {
+        match w.strip_prefix('#') {
+            Some(tag) => {
+                let tag: String = tag
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+                    .take(32)
+                    .collect::<String>()
+                    .to_lowercase();
+                if project.is_none() && !tag.is_empty() {
+                    project = Some(tag);
+                }
+            }
+            None => words.push(w),
+        }
+    }
+    let task: String = words.join(" ").chars().take(120).collect();
+    (Some(task).filter(|t| !t.is_empty()), project)
 }
 
 impl Engine {
@@ -78,12 +149,92 @@ impl Engine {
             .unwrap_or_else(|| Timer::new(settings.durations().focus_ms));
         timer.apply_durations(&settings.durations());
         let _ = db.close_orphans(timer.session_id);
-        Engine { timer, settings, db, hidden: false }
+        Engine { timer, settings, db, hidden: false, away_notice: None }
     }
 
     pub fn today(&self, now: i64) -> DayStats {
         let (from, to) = day_bounds(now);
         self.db.day_stats(from, to).unwrap_or_default()
+    }
+
+    pub fn today_full(&self, now: i64) -> TodayStats {
+        let (from, to) = day_bounds(now);
+        let day = self.today(now);
+        let distraction_list = self.db.distractions_between(from, to).unwrap_or_default();
+        let (projects, ..) = analytics::breakdowns(&day.sessions, &[], local_hour);
+        TodayStats { streak: self.streak(now), projects, distraction_list, day }
+    }
+
+    pub fn streak(&self, now: i64) -> Streak {
+        let active: BTreeSet<NaiveDate> =
+            self.db.completed_focus_starts(0).unwrap_or_default().into_iter().map(local_date).collect();
+        analytics::streak(&active, local_date(now))
+    }
+
+    /// Week or month `offset` periods back (0 = current), compared with the
+    /// period before it. For the current period the comparison only covers
+    /// the same number of days, so a Thursday isn't measured against a full week.
+    pub fn period(&self, kind: &str, offset: i32, now: i64) -> PeriodStats {
+        let today = local_date(now);
+        let (first, next) = analytics::period_dates(kind, offset.min(0), today);
+        let days = days_between(first, next);
+        let (from, to) = (days[0].0, days[days.len() - 1].1);
+        let sessions = self.db.sessions_between(from, to).unwrap_or_default();
+        let distractions = self.db.distractions_between(from, to).unwrap_or_default();
+        let (agg, totals) = analytics::totals(&days, now, &sessions, &distractions);
+
+        let (pfirst, pnext) = analytics::period_dates(kind, offset.min(0) - 1, today);
+        let mut pdays = days_between(pfirst, pnext);
+        pdays.truncate(totals.elapsed_days.max(1) as usize);
+        let (pfrom, pto) = (pdays[0].0, pdays[pdays.len() - 1].1);
+        let (_, previous) = analytics::totals(
+            &pdays,
+            now,
+            &self.db.sessions_between(pfrom, pto).unwrap_or_default(),
+            &self.db.distractions_between(pfrom, pto).unwrap_or_default(),
+        );
+
+        let (projects, categories, focus_by_hour, distractions_by_hour) =
+            analytics::breakdowns(&sessions, &distractions, local_hour);
+        PeriodStats {
+            from,
+            to,
+            days: agg,
+            totals,
+            previous,
+            projects,
+            categories,
+            focus_by_hour,
+            distractions_by_hour,
+            streak: self.streak(now),
+        }
+    }
+
+    /// Record a distraction right now, tied to the focus session if one is on.
+    pub fn log_distraction(&mut self, now: i64) -> Option<LoggedDistraction> {
+        let in_focus = self.timer.phase == Phase::Focus && self.timer.run != RunState::Idle;
+        let session_id = if in_focus { self.timer.session_id } else { None };
+        let id = self.db.insert_distraction(now, session_id).ok()?;
+        let today = self.today(now);
+        Some(LoggedDistraction {
+            id,
+            at: now,
+            count_today: today.distractions,
+            session_number: in_focus.then_some(today.completed + 1),
+        })
+    }
+
+    /// Nobody has touched the keyboard or mouse since `since`. Pauses a
+    /// running focus block as of that moment; returns true if it did.
+    pub fn away(&mut self, since: i64, now: i64) -> bool {
+        match self.timer.pause_away(since, now) {
+            Some(ms) => {
+                self.away_notice = Some(ms);
+                self.persist();
+                true
+            }
+            None => false,
+        }
     }
 
     pub fn snapshot(&self, now: i64) -> Snapshot {
@@ -98,11 +249,14 @@ impl Engine {
             cycle: t.cycle,
             long_every: self.settings.long_every,
             task: t.task.clone(),
+            project: t.project.clone(),
             preset: self.settings.preset.clone(),
             session_number: today.completed + u32::from(t.phase == Phase::Focus),
             completed_today: today.completed,
             focus_ms_today: today.focus_ms + if t.phase == Phase::Focus { t.active(now) } else { 0 },
             goal_ms: self.settings.daily_goal_min as i64 * 60_000,
+            distractions_today: today.distractions,
+            away_ms: self.away_notice,
             hidden: self.hidden,
             now,
         }
@@ -112,6 +266,7 @@ impl Engine {
     /// recorded in the database.
     pub fn apply(&mut self, action: Action, now: i64) -> Option<Finished> {
         let d = self.settings.durations();
+        self.away_notice = None;
         let finished = match action {
             Action::Toggle => {
                 if self.timer.run == RunState::Running {
@@ -136,12 +291,13 @@ impl Engine {
                 None
             }
             Action::SwitchPhase(p) => self.timer.switch_phase(p, now, &d),
-            Action::SetTask(task) => {
-                let task = task.map(|s| s.trim().chars().take(120).collect::<String>()).filter(|s| !s.is_empty());
+            Action::SetTask(text) => {
+                let (task, project) = split_project(text.as_deref().unwrap_or(""));
                 if let Some(id) = self.timer.session_id {
-                    let _ = self.db.set_session_task(id, task.as_deref());
+                    let _ = self.db.set_session_task(id, task.as_deref(), project.as_deref());
                 }
                 self.timer.task = task;
+                self.timer.project = project;
                 None
             }
             Action::Preset(id) => {
@@ -200,6 +356,7 @@ impl Engine {
                     now,
                     self.timer.duration_ms,
                     self.timer.task.as_deref(),
+                    self.timer.project.as_deref(),
                     &self.settings.preset,
                 )
                 .ok();
@@ -307,6 +464,74 @@ mod tests {
         assert_eq!(e.timer.run, RunState::Running);
         assert_ne!(e.timer.session_id, first);
         assert_eq!(e.timer.remaining(t0 + 5 * MINUTE), 25 * MINUTE);
+    }
+
+    #[test]
+    fn project_tags_are_split_from_the_task() {
+        assert_eq!(split_project("Finish AI PM resume #Job-Search"), (Some("Finish AI PM resume".into()), Some("job-search".into())));
+        assert_eq!(split_project("#cv"), (None, Some("cv".into())));
+        assert_eq!(split_project("Write #blog post #ignored"), (Some("Write post".into()), Some("blog".into())));
+        assert_eq!(split_project("  plain task "), (Some("plain task".into()), None));
+        assert_eq!(split_project("# lonely hash"), (Some("lonely hash".into()), None));
+    }
+
+    #[test]
+    fn project_is_recorded_with_the_session() {
+        let mut e = engine();
+        let t0 = now();
+        e.apply(Action::SetTask(Some("Draft case study #portfolio".into())), t0);
+        e.apply(Action::Toggle, t0);
+        e.tick(t0 + 25 * MINUTE).unwrap();
+        let today = e.today_full(t0);
+        assert_eq!(today.day.sessions[0].project.as_deref(), Some("portfolio"));
+        assert_eq!(today.projects[0].name, "portfolio");
+        assert_eq!(e.snapshot(t0).project.as_deref(), Some("portfolio"), "project carries into the break");
+    }
+
+    #[test]
+    fn away_pause_shows_notice_until_next_action() {
+        let mut e = engine();
+        let t0 = now();
+        e.apply(Action::Toggle, t0);
+        assert!(e.away(t0 + 8 * MINUTE, t0 + 13 * MINUTE));
+        let s = e.snapshot(t0 + 13 * MINUTE);
+        assert_eq!(s.run, RunState::Paused);
+        assert_eq!(s.away_ms, Some(5 * MINUTE));
+        assert_eq!(s.remaining_ms, 17 * MINUTE);
+        e.apply(Action::Toggle, t0 + 14 * MINUTE);
+        assert_eq!(e.snapshot(t0 + 14 * MINUTE).away_ms, None);
+        assert!(!e.away(t0, t0 + 15 * MINUTE) || e.timer.run == RunState::Paused);
+    }
+
+    #[test]
+    fn distractions_link_to_the_running_focus_session() {
+        let mut e = engine();
+        let t0 = now();
+        let idle = e.log_distraction(t0).unwrap();
+        assert_eq!(idle.session_number, None);
+        e.apply(Action::Toggle, t0);
+        let d = e.log_distraction(t0 + MINUTE).unwrap();
+        assert_eq!(d.count_today, 2);
+        assert_eq!(d.session_number, Some(1));
+        let rows = e.db.distractions_between(t0, t0 + 2 * MINUTE).unwrap();
+        assert_eq!(rows[1].session_id, e.timer.session_id);
+        assert_eq!(e.snapshot(t0 + MINUTE).distractions_today, 2);
+    }
+
+    #[test]
+    fn period_stats_cover_the_current_week() {
+        let mut e = engine();
+        let t0 = now();
+        e.apply(Action::Toggle, t0);
+        e.tick(t0 + 25 * MINUTE).unwrap();
+        let w = e.period("week", 0, t0 + 30 * MINUTE);
+        assert_eq!(w.days.len(), 7);
+        assert_eq!(w.totals.completed, 1);
+        assert_eq!(w.streak.current, 1);
+        assert!(w.streak.today_done);
+        let m = e.period("month", 0, t0 + 30 * MINUTE);
+        assert!((28..=31).contains(&m.days.len()));
+        assert_eq!(m.totals.focus_ms, 25 * MINUTE);
     }
 
     #[test]

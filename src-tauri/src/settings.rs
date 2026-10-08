@@ -29,6 +29,10 @@ pub const WIDGETS: &[(&str, &str, f64, f64)] = &[
     ("medium", "Medium", 340.0, 164.0),
     ("large", "Large", 240.0, 300.0),
 ];
+/// Zoom's screen-share helper, the macOS screenshot/recording UI (⌘⇧5) and OBS.
+pub const DEFAULT_AUTO_HIDE_APPS: &[&str] = &["CptHost", "screencaptureui", "obs"];
+pub const MENU_BAR_TIMER: &[&str] = &["off", "hidden", "always"];
+
 pub const STYLES: &[(&str, &str)] = &[("retro", "Retro"), ("minimal", "Minimal")];
 pub const SCALE_RANGE: (f64, f64) = (0.6, 2.0);
 
@@ -68,6 +72,21 @@ pub struct Settings {
     pub launch_at_login: bool,
     pub show_in_dock: bool,
 
+    /// Auto-pause focus after this many idle minutes (0 = off).
+    pub away_min: u32,
+    /// Hide the clock while any of `auto_hide_apps` is running.
+    pub auto_hide: bool,
+    /// Process names, matched case-insensitively.
+    pub auto_hide_apps: Vec<String>,
+    /// Run the "Chronos Focus On/Off" shortcuts around focus sessions.
+    pub dnd: bool,
+    /// "off" | "hidden" | "always"
+    pub menu_bar_timer: String,
+    pub distraction_shortcut: String,
+    /// Ask "how did it go?" after a focus session.
+    pub reflection: bool,
+    pub notifications: bool,
+
     pub sound: bool,
     pub volume: f64,
 
@@ -94,6 +113,14 @@ impl Default for Settings {
             scale: 1.0,
             launch_at_login: true,
             show_in_dock: false,
+            away_min: 5,
+            auto_hide: true,
+            auto_hide_apps: DEFAULT_AUTO_HIDE_APPS.iter().map(|s| s.to_string()).collect(),
+            dnd: false,
+            menu_bar_timer: "off".into(),
+            distraction_shortcut: "Control+Alt+D".into(),
+            reflection: true,
+            notifications: true,
             sound: true,
             volume: 0.6,
             daily_goal_min: 180,
@@ -132,6 +159,20 @@ impl Settings {
         if self.hide_shortcut.trim().is_empty() {
             self.hide_shortcut = Settings::default().hide_shortcut;
         }
+        if self.distraction_shortcut.trim().is_empty() {
+            self.distraction_shortcut = Settings::default().distraction_shortcut;
+        }
+        self.away_min = self.away_min.min(60);
+        if !MENU_BAR_TIMER.contains(&self.menu_bar_timer.as_str()) {
+            self.menu_bar_timer = "off".into();
+        }
+        let mut apps: Vec<String> = Vec::new();
+        for a in self.auto_hide_apps.iter().map(|a| a.trim()).filter(|a| !a.is_empty()) {
+            if !apps.iter().any(|x| x.eq_ignore_ascii_case(a)) && apps.len() < 24 {
+                apps.push(a.chars().take(64).collect());
+            }
+        }
+        self.auto_hide_apps = apps;
         self.preset = match PRESETS.iter().find(|p| {
             p.focus_min == self.focus_min && p.short_min == self.short_min && p.long_min == self.long_min
         }) {
@@ -182,6 +223,16 @@ mod tests {
         assert_eq!(s.widget, "large");
         assert_eq!(s.style, "retro");
         assert_eq!(s.scale, SCALE_RANGE.1);
+        let s2 = Settings {
+            auto_hide_apps: vec![" Keynote ".into(), "keynote".into(), "".into()],
+            menu_bar_timer: "sometimes".into(),
+            away_min: 500,
+            ..Default::default()
+        }
+        .sanitized();
+        assert_eq!(s2.auto_hide_apps, vec!["Keynote".to_string()]);
+        assert_eq!(s2.menu_bar_timer, "off");
+        assert_eq!(s2.away_min, 60);
         assert_eq!(s.focus_min, 1);
         assert_eq!(s.opacity, 1.0);
         assert_eq!(s.volume, 0.6);

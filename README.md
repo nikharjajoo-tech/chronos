@@ -60,26 +60,37 @@ Settings, which also has a size slider (60–200%).
 | ⌘⇧H (configurable), the eye button or the menu bar | Hide or show the clock. **The timer keeps running.** |
 | Drag anywhere / bottom-right corner | Move / resize (position and size are remembered) |
 
-## What's in the MVP (Phase 1)
+## Features
 
-- Floating, transparent, draggable and resizable clock, always on top, with adjustable opacity
-- Focus, short break and long break (every N sessions), plus presets: Standard 25/5, Deep Work 50/10, Quick 15/5 and Custom
-- Start, pause, reset, restart and skip; live +/− time, setting an exact time, switching phase
-- Hide mode via a global shortcut, the tray or a button. Optional invisibility in screen captures.
-- Timer based on absolute end times, run by a Rust watchdog. It survives sleep, hidden windows and app restarts.
-- Every session recorded in local SQLite. A Today panel shows sessions, completed, interrupted and abandoned counts, focused and break time, average and longest focus, streak, a timeline and a log.
-- Completion chime with volume control, a daily focus goal bar, and an optional task intention
+**Timer**
+- Focus, short break and long break, with presets (Standard 25/5, Deep Work 50/10, Quick 15/5) and custom durations
+- Live +/− time, typing an exact time, switching phase, restart and skip
+- Wall-clock engine in Rust. It survives sleep, hidden windows and crashes.
 
-Not yet built (Phases 2–3 in the brief): weekly and monthly history, distraction
-logging (⌘D), end-of-session reflection, notifications, productivity score,
-insights and adaptive suggestions, and themes. The schema already has the
-`distractions` table and `rating` / `goal_completed` columns those need.
+**Staying out of the way**
+- Hide mode (⌘⇧H, the tray or a button). The timer keeps running.
+- **Auto-hide while sharing or recording.** Hides while Zoom screen share, the ⌘⇧5 recorder, OBS, or any app you add is running, and comes back afterwards.
+- Optional invisibility in screenshots and recordings
+- **Menu-bar countdown:** off, when hidden, or always
+
+**Honest focus data**
+- **Away detection.** After N idle minutes, or a closed lid, focus pauses as of when you left, so away time never counts.
+- **Do Not Disturb** during focus, through two Shortcuts that Chronos installs for you (Settings → Focus helpers)
+- **Distraction log:** ⌃⌥D from any app, with an optional reason (keys 1–7)
+- **Reflection** after each focus session (😫 😐 🙂 🔥, plus "did you finish it?"). Always skippable.
+- **Projects:** add `#project` to the task, e.g. `Finish resume #job-search`
+- Notifications when a session ends or is paused while you're away
+
+**Stats** (Today and History tabs)
+- Today: focus vs goal, streak, sessions, completed, interrupted and abandoned, distractions, a timeline, projects and a log
+- History by week or month: focus time, average per day, completion rate, average session, distractions, consistency, streak, average rating. Each is compared with the same days of the previous period.
+- Per-day bars, best focus hours, distraction peaks, and breakdowns by project and by distraction reason
 
 ## Tests
 
 ```bash
 npm test           # frontend: formatting, parsing, shortcut capture
-npm run test:rust  # timer state machine, database, engine lifecycle, crash recovery
+npm run test:rust  # timer, away pauses, database, analytics, streaks, engine lifecycle, crash recovery
 ```
 
 ## Privacy

@@ -1,8 +1,11 @@
+pub mod analytics;
 pub mod commands;
+pub mod companion;
 pub mod db;
 pub mod engine;
 pub mod settings;
 pub mod shell;
+pub mod sysmac;
 pub mod timer;
 
 use engine::Engine;
@@ -15,6 +18,7 @@ use tauri_plugin_window_state::AppHandleExt;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -26,6 +30,15 @@ pub fn run() {
             commands::snapshot,
             commands::act,
             commands::today_stats,
+            commands::period_stats,
+            commands::recent_projects,
+            commands::log_distraction,
+            commands::set_distraction_category,
+            commands::rate_session,
+            commands::quick_state,
+            commands::quick_close,
+            commands::helper_status,
+            commands::install_dnd_shortcuts,
             commands::get_settings,
             commands::set_settings,
             commands::toggle_clock,
@@ -56,10 +69,11 @@ pub fn run() {
             let engine = Engine::load(db);
             let settings = engine.settings.clone();
             app.manage(AppState(Mutex::new(engine)));
+            app.manage(companion::CompanionState(Mutex::new(Default::default())));
 
             let handle = app.handle().clone();
             shell::build_tray(&handle, &settings.hide_shortcut)?;
-            if let Err(e) = shell::register_hide_shortcut(&handle, &settings.hide_shortcut, None) {
+            if let Err(e) = shell::register_shortcuts(&handle, &settings, None) {
                 eprintln!("{e}");
             }
             shell::apply_window_settings(&handle, &settings);
@@ -70,7 +84,7 @@ pub fn run() {
             if let Some(w) = app.get_webview_window(CLOCK) {
                 w.show()?;
             }
-            shell::spawn_watchdog(handle);
+            companion::spawn_watchdog(handle);
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -82,6 +96,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             RunEvent::Reopen { .. } => shell::show_clock(app),
             RunEvent::Exit => {
+                companion::dnd_off_now(app);
                 let _ = app.save_window_state(shell::window_state_flags());
             }
             _ => {}

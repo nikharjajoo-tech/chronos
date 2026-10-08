@@ -173,7 +173,7 @@ export function TaskLine({ m }: { m: Model }) {
   const editing = m.editing === "task";
   const [draft, setDraft] = useState("");
   useEffect(() => {
-    if (editing) setDraft(snap.task ?? "");
+    if (editing) setDraft([snap.task, snap.project && `#${snap.project}`].filter(Boolean).join(" "));
   }, [editing]);
   const done = (save: boolean) => {
     if (save) act({ type: "setTask", value: draft.trim() || null });
@@ -187,7 +187,7 @@ export function TaskLine({ m }: { m: Model }) {
           autoFocus
           className="task-input"
           maxLength={120}
-          placeholder="What are you working on?"
+          placeholder="What are you working on?  #project"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -201,11 +201,22 @@ export function TaskLine({ m }: { m: Model }) {
     );
   }
 
+  if (snap.awayMs !== null && snap.run === "paused") {
+    return (
+      <div className="task">
+        <button className="task-text away" title="Chronos paused the session while you were away. Press play to continue." onClick={() => act({ type: "toggle" })}>
+          Paused · away {Math.max(1, Math.round(snap.awayMs / 60_000))}m. Resume?
+        </button>
+      </div>
+    );
+  }
+
   let text: string;
   let cls = "task-text";
   if (snap.phase === "short_break") text = snap.run === "idle" ? "Nice work. Take five?" : "Breathe. Back soon.";
   else if (snap.phase === "long_break") text = snap.run === "idle" ? "Set done. Take a proper break." : "Step away for a bit.";
   else if (snap.task) text = snap.task;
+  else if (snap.project) text = "";
   else {
     text = "+ what are you working on?";
     cls += " placeholder";
@@ -215,11 +226,12 @@ export function TaskLine({ m }: { m: Model }) {
     <div className="task">
       <button
         className={cls}
-        title={snap.task ? `Focusing on: ${snap.task} (click to change)` : "Set an intention (T)"}
+        title={snap.task ? `Focusing on: ${snap.task} (click to change)` : "Set an intention (T). Add #project to tag it."}
         onClick={() => m.setEditing("task")}
       >
         {snap.phase === "focus" && snap.task && <span className="task-mark">▸</span>}
         {text}
+        {snap.phase === "focus" && snap.project && <span className="task-project">#{snap.project}</span>}
       </button>
     </div>
   );

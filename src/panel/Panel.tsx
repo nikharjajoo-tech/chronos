@@ -1,23 +1,26 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { History } from "./History";
 import { SettingsView } from "./SettingsView";
 import { Today } from "./Today";
 import "./panel.css";
 
-type Tab = "today" | "settings";
+type Tab = "today" | "history" | "settings";
 const TABS: { id: Tab; label: string }[] = [
   { id: "today", label: "Today" },
+  { id: "history", label: "History" },
   { id: "settings", label: "Settings" },
 ];
-const tabFromHash = (): Tab => (location.hash.replace("#", "") === "settings" ? "settings" : "today");
+const asTab = (t: string): Tab => (TABS.some((x) => x.id === t) ? (t as Tab) : "today");
+const tabFromHash = (): Tab => asTab(location.hash.replace("#", ""));
 
 export function Panel() {
   const [tab, setTab] = useState<Tab>(tabFromHash);
 
-  useEffect(() => api.onTab((t) => setTab(t === "settings" ? "settings" : "today")), []);
+  useEffect(() => api.onTab((t) => setTab(asTab(t))), []);
   useEffect(() => {
     history.replaceState(null, "", `#${tab}`);
-    document.title = tab === "today" ? "Chronos · Today" : "Chronos · Settings";
+    document.title = `Chronos · ${TABS.find((t) => t.id === tab)!.label}`;
   }, [tab]);
 
   return (
@@ -35,7 +38,7 @@ export function Panel() {
           ))}
         </nav>
       </header>
-      <main className="panel-body">{tab === "today" ? <Today /> : <SettingsView />}</main>
+      <main className="panel-body">{tab === "today" ? <Today /> : tab === "history" ? <History /> : <SettingsView />}</main>
     </div>
   );
 }

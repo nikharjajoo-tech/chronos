@@ -93,8 +93,11 @@ pub struct Finished {
     pub planned_ms: i64,
     pub actual_ms: i64,
     pub pause_count: u32,
+    /// Pauses made automatically because you stepped away.
+    pub away_count: u32,
     pub adjust_ms: i64,
     pub task: Option<String>,
+    pub project: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -115,10 +118,12 @@ pub struct Timer {
     /// Running time accumulated before `run_since`.
     pub active_ms: i64,
     pub pause_count: u32,
+    pub away_count: u32,
     pub adjust_ms: i64,
     /// Focus blocks completed since the last long break.
     pub cycle: u32,
     pub task: Option<String>,
+    pub project: Option<String>,
     pub session_id: Option<i64>,
 }
 
@@ -140,9 +145,11 @@ impl Timer {
             run_since: None,
             active_ms: 0,
             pause_count: 0,
+            away_count: 0,
             adjust_ms: 0,
             cycle: 0,
             task: None,
+            project: None,
             session_id: None,
         }
     }
@@ -182,6 +189,7 @@ impl Timer {
                 self.run_since = Some(now);
                 self.active_ms = 0;
                 self.pause_count = 0;
+                self.away_count = 0;
                 self.adjust_ms = 0;
                 self.run = RunState::Running;
                 true
@@ -190,15 +198,34 @@ impl Timer {
     }
 
     pub fn pause(&mut self, now: i64) {
+        self.pause_at(now);
+    }
+
+    /// Pause as of an earlier moment, e.g. when you actually walked away.
+    /// Never reaches back before the current running stretch began.
+    pub fn pause_at(&mut self, at: i64) {
         if self.run != RunState::Running {
             return;
         }
-        self.remaining_ms = self.remaining(now);
-        self.active_ms = self.active(now);
+        let at = at.max(self.run_since.unwrap_or(at));
+        self.remaining_ms = self.remaining(at);
+        self.active_ms = self.active(at);
         self.end_at = None;
         self.run_since = None;
         self.pause_count += 1;
         self.run = RunState::Paused;
+    }
+
+    /// Auto-pause because nobody is at the keyboard. Returns the away time
+    /// that was kept out of the session, or None if nothing was paused.
+    pub fn pause_away(&mut self, since: i64, now: i64) -> Option<i64> {
+        if self.run != RunState::Running || self.phase != Phase::Focus {
+            return None;
+        }
+        let since = since.max(self.run_since.unwrap_or(since)).min(now);
+        self.pause_at(since);
+        self.away_count += 1;
+        Some(now - since)
     }
 
     /// Called periodically. Completes the block if its end time has passed;
@@ -306,12 +333,14 @@ impl Timer {
 
     fn load_phase(&mut self, phase: Phase, d: &Durations) {
         let task = self.task.take();
+        let project = self.project.take();
         let cycle = self.cycle;
         *self = Timer::new(d.for_phase(phase));
         self.phase = phase;
         self.cycle = cycle;
         // The task describes what you're working on, so it survives breaks.
         self.task = task;
+        self.project = project;
     }
 
     fn advance(&mut self, completed: bool, d: &Durations) {
@@ -352,8 +381,10 @@ impl Timer {
             planned_ms: self.duration_ms,
             actual_ms,
             pause_count: self.pause_count,
+            away_count: self.away_count,
             adjust_ms: self.adjust_ms,
             task: self.task.clone(),
+            project: self.project.clone(),
         })
     }
 }
@@ -544,6 +575,40 @@ mod tests {
         t.start(T0);
         t.apply_durations(&D);
         assert_eq!(t.duration_ms, 50 * MINUTE);
+    }
+
+    #[test]
+    fn away_pause_is_backdated_to_when_you_left() {
+        let mut t = timer();
+        t.start(T0);
+        // Last input at +10m; detected at +16m.
+        let away = t.pause_away(T0 + 10 * MINUTE, T0 + 16 * MINUTE).unwrap();
+        assert_eq!(away, 6 * MINUTE);
+        assert_eq!(t.run, RunState::Paused);
+        assert_eq!(t.active_ms, 10 * MINUTE);
+        assert_eq!(t.remaining_ms, 15 * MINUTE);
+        assert_eq!(t.away_count, 1);
+    }
+
+    #[test]
+    fn away_pause_never_reaches_before_the_current_stretch() {
+        let mut t = timer();
+        t.start(T0);
+        t.pause(T0 + 5 * MINUTE);
+        t.start(T0 + 30 * MINUTE);
+        // Idle since before the resume: only the new stretch is affected.
+        t.pause_away(T0, T0 + 40 * MINUTE).unwrap();
+        assert_eq!(t.active_ms, 5 * MINUTE);
+        assert_eq!(t.remaining_ms, 20 * MINUTE);
+    }
+
+    #[test]
+    fn breaks_are_not_auto_paused() {
+        let mut t = timer();
+        t.switch_phase(Phase::ShortBreak, T0, &D);
+        t.start(T0);
+        assert!(t.pause_away(T0, T0 + 10 * MINUTE).is_none());
+        assert_eq!(t.run, RunState::Running);
     }
 
     #[test]

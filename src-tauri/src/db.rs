@@ -43,6 +43,12 @@ const MIGRATIONS: &[&str] = &[
       value TEXT NOT NULL
     );
     "#,
+    // 2 — projects (#tags on the task) and automatic away pauses
+    r#"
+    ALTER TABLE sessions ADD COLUMN project TEXT;
+    ALTER TABLE sessions ADD COLUMN away_count INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX idx_sessions_project ON sessions(project);
+    "#,
 ];
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -56,11 +62,31 @@ pub struct SessionRow {
     pub planned_ms: i64,
     pub actual_ms: i64,
     pub pause_count: u32,
+    pub away_count: u32,
     pub task: Option<String>,
+    pub project: Option<String>,
+    pub rating: Option<u8>,
+    pub goal_completed: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DistractionRow {
+    pub id: i64,
+    pub at: i64,
+    pub category: Option<String>,
+    pub session_id: Option<i64>,
+}
+
+pub const DISTRACTION_CATEGORIES: &[&str] =
+    &["social", "youtube", "phone", "messaging", "browsing", "work", "other"];
+
 impl SessionRow {
-    fn is_focus(&self) -> bool {
+    pub fn is_completed(&self) -> bool {
+        self.status == EndStatus::Completed.as_str()
+    }
+
+    pub fn is_focus(&self) -> bool {
         self.kind == Phase::Focus.as_str()
     }
 }
@@ -79,6 +105,7 @@ pub struct DayStats {
     pub longest_focus_ms: i64,
     /// Consecutive completed focus sessions, counting back from the latest.
     pub current_streak: u32,
+    pub distractions: u32,
     pub first_start: Option<i64>,
     pub last_end: Option<i64>,
     /// Finished sessions in the range (cancelled mis-clicks excluded), oldest first.
@@ -143,12 +170,13 @@ impl Db {
         started_at: i64,
         planned_ms: i64,
         task: Option<&str>,
+        project: Option<&str>,
         preset: &str,
     ) -> Result<i64> {
         self.conn.execute(
-            "INSERT INTO sessions (kind, status, started_at, planned_ms, task, preset, created_at)
-             VALUES (?1, 'running', ?2, ?3, ?4, ?5, ?2)",
-            params![phase.as_str(), started_at, planned_ms, task, preset],
+            "INSERT INTO sessions (kind, status, started_at, planned_ms, task, project, preset, created_at)
+             VALUES (?1, 'running', ?2, ?3, ?4, ?5, ?6, ?2)",
+            params![phase.as_str(), started_at, planned_ms, task, project, preset],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -156,11 +184,11 @@ impl Db {
     pub fn finish_session(&self, f: &Finished, preset: &str) -> Result<i64> {
         let id = match f.session_id {
             Some(id) => id,
-            None => self.insert_session(f.phase, f.started_at, f.planned_ms, f.task.as_deref(), preset)?,
+            None => self.insert_session(f.phase, f.started_at, f.planned_ms, f.task.as_deref(), f.project.as_deref(), preset)?,
         };
         self.conn.execute(
             "UPDATE sessions SET status = ?2, ended_at = ?3, planned_ms = ?4, actual_ms = ?5,
-                    pause_count = ?6, adjust_ms = ?7, task = ?8
+                    pause_count = ?6, adjust_ms = ?7, task = ?8, project = ?9, away_count = ?10
              WHERE id = ?1",
             params![
                 id,
@@ -170,15 +198,65 @@ impl Db {
                 f.actual_ms,
                 f.pause_count,
                 f.adjust_ms,
-                f.task
+                f.task,
+                f.project,
+                f.away_count
             ],
         )?;
         Ok(id)
     }
 
-    pub fn set_session_task(&self, id: i64, task: Option<&str>) -> Result<()> {
-        self.conn.execute("UPDATE sessions SET task = ?2 WHERE id = ?1", params![id, task])?;
+    pub fn set_session_task(&self, id: i64, task: Option<&str>, project: Option<&str>) -> Result<()> {
+        self.conn.execute("UPDATE sessions SET task = ?2, project = ?3 WHERE id = ?1", params![id, task, project])?;
         Ok(())
+    }
+
+    /// End-of-session reflection. Either field may be left unchanged.
+    pub fn rate_session(&self, id: i64, rating: Option<u8>, goal: Option<&str>) -> Result<()> {
+        self.conn.execute(
+            "UPDATE sessions SET rating = COALESCE(?2, rating), goal_completed = COALESCE(?3, goal_completed) WHERE id = ?1",
+            params![id, rating, goal],
+        )?;
+        Ok(())
+    }
+
+    pub fn insert_distraction(&self, at: i64, session_id: Option<i64>) -> Result<i64> {
+        self.conn.execute("INSERT INTO distractions (at, session_id) VALUES (?1, ?2)", params![at, session_id])?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn set_distraction_category(&self, id: i64, category: Option<&str>) -> Result<()> {
+        let category = category.filter(|c| DISTRACTION_CATEGORIES.contains(c));
+        self.conn.execute("UPDATE distractions SET category = ?2 WHERE id = ?1", params![id, category])?;
+        Ok(())
+    }
+
+    pub fn distractions_between(&self, from: i64, to: i64) -> Result<Vec<DistractionRow>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, at, category, session_id FROM distractions WHERE at >= ?1 AND at < ?2 ORDER BY at",
+        )?;
+        let rows = stmt.query_map(params![from, to], |r| {
+            Ok(DistractionRow { id: r.get(0)?, at: r.get(1)?, category: r.get(2)?, session_id: r.get(3)? })
+        })?;
+        rows.collect()
+    }
+
+    /// Start times of completed focus sessions since `from`, for streaks.
+    pub fn completed_focus_starts(&self, from: i64) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT started_at FROM sessions WHERE kind = 'focus' AND status = 'completed' AND started_at >= ?1 ORDER BY started_at",
+        )?;
+        let rows = stmt.query_map([from], |r| r.get(0))?;
+        rows.collect()
+    }
+
+    /// Most recently used projects, newest first.
+    pub fn recent_projects(&self, limit: u32) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT project FROM sessions WHERE project IS NOT NULL GROUP BY project ORDER BY MAX(started_at) DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map([limit], |r| r.get(0))?;
+        rows.collect()
     }
 
     /// Sessions left `running` by a crash that the restored timer doesn't own.
@@ -194,7 +272,8 @@ impl Db {
 
     pub fn sessions_between(&self, from: i64, to: i64) -> Result<Vec<SessionRow>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT id, kind, status, started_at, ended_at, planned_ms, COALESCE(actual_ms, 0), pause_count, task
+            "SELECT id, kind, status, started_at, ended_at, planned_ms, COALESCE(actual_ms, 0), pause_count, task,
+                    project, away_count, rating, goal_completed
              FROM sessions
              WHERE started_at >= ?1 AND started_at < ?2 AND status NOT IN ('running', 'cancelled')
              ORDER BY started_at",
@@ -210,13 +289,19 @@ impl Db {
                 actual_ms: r.get(6)?,
                 pause_count: r.get(7)?,
                 task: r.get(8)?,
+                project: r.get(9)?,
+                away_count: r.get(10)?,
+                rating: r.get(11)?,
+                goal_completed: r.get(12)?,
             })
         })?;
         rows.collect()
     }
 
     pub fn day_stats(&self, from: i64, to: i64) -> Result<DayStats> {
-        Ok(summarize(self.sessions_between(from, to)?))
+        let mut s = summarize(self.sessions_between(from, to)?);
+        s.distractions = self.distractions_between(from, to)?.len() as u32;
+        Ok(s)
     }
 }
 
@@ -227,7 +312,7 @@ fn summarize(sessions: Vec<SessionRow>) -> DayStats {
             s.focus_sessions += 1;
             s.focus_ms += row.actual_ms;
             s.longest_focus_ms = s.longest_focus_ms.max(row.actual_ms);
-            if row.status == EndStatus::Completed.as_str() {
+            if row.is_completed() {
                 s.completed += 1;
                 s.current_streak += 1;
             } else {
@@ -267,8 +352,10 @@ mod tests {
             planned_ms: 25 * MINUTE,
             actual_ms: mins * MINUTE,
             pause_count: pauses,
+            away_count: 0,
             adjust_ms: 0,
             task: None,
+            project: None,
         }
     }
 
@@ -292,16 +379,46 @@ mod tests {
     #[test]
     fn running_session_is_updated_in_place() {
         let db = Db::open_in_memory().unwrap();
-        let id = db.insert_session(Phase::Focus, T0, 25 * MINUTE, Some("write"), "standard").unwrap();
+        let id = db.insert_session(Phase::Focus, T0, 25 * MINUTE, Some("write"), Some("blog"), "standard").unwrap();
         assert!(db.sessions_between(T0, T0 + 1).unwrap().is_empty(), "running rows are hidden");
         let mut f = finished(Phase::Focus, EndStatus::Completed, T0, 25, 0);
         f.session_id = Some(id);
         f.task = Some("write".into());
+        f.project = Some("blog".into());
         assert_eq!(db.finish_session(&f, "standard").unwrap(), id);
         let rows = db.sessions_between(T0, T0 + 1).unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].status, "completed");
         assert_eq!(rows[0].task.as_deref(), Some("write"));
+        assert_eq!(rows[0].project.as_deref(), Some("blog"));
+
+        db.rate_session(id, Some(4), None).unwrap();
+        db.rate_session(id, None, Some("yes")).unwrap();
+        let row = &db.sessions_between(T0, T0 + 1).unwrap()[0];
+        assert_eq!((row.rating, row.goal_completed.as_deref()), (Some(4), Some("yes")));
+    }
+
+    #[test]
+    fn distractions_are_logged_and_categorised() {
+        let db = Db::open_in_memory().unwrap();
+        let a = db.insert_distraction(T0, None).unwrap();
+        let b = db.insert_distraction(T0 + 5, None).unwrap();
+        db.set_distraction_category(a, Some("youtube")).unwrap();
+        db.set_distraction_category(b, Some("not-a-category")).unwrap();
+        let rows = db.distractions_between(T0, T0 + 10).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].category.as_deref(), Some("youtube"));
+        assert_eq!(rows[1].category, None);
+        assert_eq!(db.day_stats(T0, T0 + 10).unwrap().distractions, 2);
+    }
+
+    #[test]
+    fn recent_projects_newest_first() {
+        let db = Db::open_in_memory().unwrap();
+        for (i, p) in ["a", "b", "a", "c"].iter().enumerate() {
+            db.insert_session(Phase::Focus, T0 + i as i64, MINUTE, None, Some(p), "standard").unwrap();
+        }
+        assert_eq!(db.recent_projects(2).unwrap(), vec!["c".to_string(), "a".to_string()]);
     }
 
     #[test]
@@ -337,8 +454,8 @@ mod tests {
     #[test]
     fn orphans_are_closed_but_the_live_session_is_kept() {
         let db = Db::open_in_memory().unwrap();
-        let a = db.insert_session(Phase::Focus, T0, 25 * MINUTE, None, "standard").unwrap();
-        let b = db.insert_session(Phase::Focus, T0 + 1, 25 * MINUTE, None, "standard").unwrap();
+        let a = db.insert_session(Phase::Focus, T0, 25 * MINUTE, None, None, "standard").unwrap();
+        let b = db.insert_session(Phase::Focus, T0 + 1, 25 * MINUTE, None, None, "standard").unwrap();
         assert_eq!(db.close_orphans(Some(b)).unwrap(), 1);
         let rows = db.sessions_between(T0, T0 + 10).unwrap();
         assert_eq!(rows.iter().map(|r| r.id).collect::<Vec<_>>(), vec![a]);

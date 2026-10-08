@@ -1,12 +1,12 @@
-//! Everything that touches the desktop: windows, tray, native menus, the
-//! global hide shortcut, the completion watchdog and sound.
+//! Everything that touches the desktop: windows, tray, native menus, global
+//! shortcuts and sound. Background behaviour lives in `companion`.
 
-use crate::engine::{day_bounds, now_ms, Action, Engine, Snapshot};
+use crate::companion;
+use crate::engine::{now_ms, Action, Engine, Snapshot};
 use crate::settings::{widget_base_size, Settings, PRESETS, SCALE_RANGE, STYLES, WIDGETS};
-use crate::timer::{EndStatus, Finished, Phase, RunState, MINUTE};
+use crate::timer::{Phase, RunState, MINUTE};
 use chrono::{Local, TimeZone};
 use std::sync::Mutex;
-use std::time::Duration;
 use tauri::menu::{CheckMenuItem, Menu, MenuBuilder, MenuEvent, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder, Wry};
@@ -18,6 +18,8 @@ pub const CLOCK: &str = "clock";
 pub const PANEL: &str = "panel";
 pub const EV_SNAPSHOT: &str = "chronos://snapshot";
 pub const EV_SETTINGS: &str = "chronos://settings";
+/// Stored stats changed outside a snapshot (rating, distraction category).
+pub const EV_STATS: &str = "chronos://stats";
 const TRAY: &str = "tray";
 
 pub struct AppState(pub Mutex<Engine>);
@@ -34,7 +36,7 @@ pub fn window_state_flags() -> StateFlags {
     StateFlags::POSITION
 }
 
-fn with_engine<R>(app: &AppHandle, f: impl FnOnce(&mut Engine) -> R) -> R {
+pub fn with_engine<R>(app: &AppHandle, f: impl FnOnce(&mut Engine) -> R) -> R {
     let state = app.state::<AppState>();
     let mut engine = state.0.lock().unwrap_or_else(|p| p.into_inner());
     f(&mut engine)
@@ -47,22 +49,20 @@ pub fn dispatch(app: &AppHandle, action: Action) -> Snapshot {
         let f = e.apply(action, now);
         (f, e.snapshot(now), e.settings.clone())
     });
-    after_finish(&settings, finished.as_ref());
+    if let Some(f) = &finished {
+        companion::on_finished(app, &settings, f, &snap);
+    }
     broadcast(app, &snap);
     snap
 }
 
+/// Tell every window about a new state, and keep the tray and Do Not
+/// Disturb in step with it.
 pub fn broadcast(app: &AppHandle, snap: &Snapshot) {
     let _ = app.emit(EV_SNAPSHOT, snap);
     refresh_tray(app, snap);
-}
-
-fn after_finish(settings: &Settings, finished: Option<&Finished>) {
-    if let Some(f) = finished {
-        if f.status == EndStatus::Completed {
-            chime(settings, f.phase);
-        }
-    }
+    let dnd = with_engine(app, |e| e.settings.dnd);
+    companion::sync_dnd(app, snap, dnd);
 }
 
 /// Completion sound. Played from Rust so it works while the clock is hidden.
@@ -86,32 +86,6 @@ pub fn chime(settings: &Settings, finished_phase: Phase) {
     let _ = finished_phase;
 }
 
-/// Background thread that completes sessions on time even when the clock
-/// window is hidden or throttled. Also nudges the UI at local midnight.
-pub fn spawn_watchdog(app: AppHandle) {
-    std::thread::spawn(move || {
-        let mut day = day_bounds(now_ms()).0;
-        loop {
-            std::thread::sleep(Duration::from_millis(500));
-            let now = now_ms();
-            let today = day_bounds(now).0;
-            let out = with_engine(&app, |e| {
-                let f = e.tick(now);
-                if f.is_some() || today != day {
-                    Some((f, e.snapshot(now), e.settings.clone()))
-                } else {
-                    None
-                }
-            });
-            day = today;
-            if let Some((f, snap, settings)) = out {
-                after_finish(&settings, f.as_ref());
-                broadcast(&app, &snap);
-            }
-        }
-    });
-}
-
 // ── windows ────────────────────────────────────────────────────────────────
 
 /// Bring the clock back if hidden (used when the app icon is clicked again).
@@ -127,14 +101,23 @@ pub fn show_clock(app: &AppHandle) {
 pub fn toggle_clock(app: &AppHandle) {
     let Some(w) = app.get_webview_window(CLOCK) else { return };
     let visible = w.is_visible().unwrap_or(true);
+    set_clock_visible(app, !visible, false);
+}
+
+/// Show or hide the clock. `auto` marks a hide done by auto-hide (so it can
+/// undo it later); any manual change takes over from auto-hide.
+pub fn set_clock_visible(app: &AppHandle, visible: bool, auto: bool) {
+    let Some(w) = app.get_webview_window(CLOCK) else { return };
     if visible {
+        let _ = w.show();
+    } else {
         let _ = app.save_window_state(window_state_flags());
         let _ = w.hide();
-    } else {
-        let _ = w.show();
+        companion::hide_quick(app);
     }
+    companion::set_auto_hidden(app, auto && !visible);
     let snap = with_engine(app, |e| {
-        e.hidden = visible;
+        e.hidden = !visible;
         e.snapshot(now_ms())
     });
     broadcast(app, &snap);
@@ -248,27 +231,34 @@ pub fn place_clock_first_run(app: &AppHandle) {
     ));
 }
 
-// ── global shortcut ────────────────────────────────────────────────────────
+// ── global shortcuts ───────────────────────────────────────────────────────
 
-/// (Re)register the hide/show shortcut. On failure the previous shortcut is
-/// restored so the user is never left without one.
-pub fn register_hide_shortcut(app: &AppHandle, shortcut: &str, previous: Option<&str>) -> Result<(), String> {
+/// (Re)register the hide/show and log-distraction shortcuts. On failure the
+/// previous pair is restored so the user is never left without them.
+pub fn register_shortcuts(app: &AppHandle, s: &Settings, previous: Option<&Settings>) -> Result<(), String> {
     let gs = app.global_shortcut();
-    let _ = gs.unregister_all();
-    let bind = |s: &str| {
-        gs.on_shortcut(s, |app, _, event| {
+    let bind = |hide: &str, distraction: &str| -> Result<(), String> {
+        let _ = gs.unregister_all();
+        gs.on_shortcut(hide, |app, _, event| {
             if event.state == ShortcutState::Pressed {
                 toggle_clock(app);
             }
         })
+        .map_err(|e| format!("Couldn't use “{}” to hide the clock: {e}", pretty_shortcut(hide)))?;
+        gs.on_shortcut(distraction, |app, _, event| {
+            if event.state == ShortcutState::Pressed {
+                companion::log_distraction(app);
+            }
+        })
+        .map_err(|e| format!("Couldn't use “{}” to log distractions: {e}", pretty_shortcut(distraction)))
     };
-    match bind(shortcut) {
+    match bind(&s.hide_shortcut, &s.distraction_shortcut) {
         Ok(()) => Ok(()),
         Err(err) => {
-            if let Some(prev) = previous {
-                let _ = bind(prev);
+            if let Some(p) = previous {
+                let _ = bind(&p.hide_shortcut, &p.distraction_shortcut);
             }
-            Err(format!("Couldn't register “{shortcut}”: {err}"))
+            Err(err)
         }
     }
 }
@@ -331,8 +321,10 @@ pub fn build_tray(app: &AppHandle, shortcut: &str) -> tauri::Result<()> {
         .item(&toggle_run)
         .item(&MenuItem::with_id(app, "act:skip", "Skip", true, None::<&str>)?)
         .item(&MenuItem::with_id(app, "act:add5", "Add 5 Minutes", true, None::<&str>)?)
+        .item(&MenuItem::with_id(app, "distraction", "Log a Distraction", true, None::<&str>)?)
         .separator()
         .item(&MenuItem::with_id(app, "panel:today", "Today’s Stats…", true, None::<&str>)?)
+        .item(&MenuItem::with_id(app, "panel:history", "History…", true, None::<&str>)?)
         .item(&MenuItem::with_id(app, "panel:settings", "Settings…", true, None::<&str>)?)
         .separator()
         .item(&MenuItem::with_id(app, "quit", "Quit Chronos", true, None::<&str>)?)
@@ -348,6 +340,12 @@ pub fn build_tray(app: &AppHandle, shortcut: &str) -> tauri::Result<()> {
         .build(app)?;
     app.manage(TrayItems { toggle_clock, toggle_run });
     Ok(())
+}
+
+pub fn set_tray_title(app: &AppHandle, title: Option<&str>) {
+    if let Some(tray) = app.tray_by_id(TRAY) {
+        let _ = tray.set_title(title);
+    }
 }
 
 fn refresh_tray(app: &AppHandle, snap: &Snapshot) {
@@ -412,6 +410,7 @@ pub fn clock_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("act:add5", "Add 5 Minutes", true)?)
         .item(&item("act:add10", "Add 10 Minutes", true)?)
         .item(&item("act:sub5", "Remove 5 Minutes", true)?)
+        .item(&item("distraction", &format!("Log a Distraction    {}", pretty_shortcut(&settings.distraction_shortcut)), true)?)
         .item(&switch.build()?)
         .item(&presets.build()?)
         .separator()
@@ -420,6 +419,7 @@ pub fn clock_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("clock:toggle", &format!("Hide Clock    {}", pretty_shortcut(&settings.hide_shortcut)), true)?)
         .separator()
         .item(&item("panel:today", "Today’s Stats…", true)?)
+        .item(&item("panel:history", "History…", true)?)
         .item(&item("panel:settings", "Settings…", true)?)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&item("quit", "Quit Chronos", true)?)
@@ -457,9 +457,12 @@ pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         open_panel(app, Some(tab));
     } else if id == "clock:toggle" {
         toggle_clock(app);
+    } else if id == "distraction" {
+        companion::log_distraction(app);
     } else if id == "aot" {
         change_settings(app, |s| s.always_on_top = !s.always_on_top);
     } else if id == "quit" {
+        companion::dnd_off_now(app);
         let _ = app.save_window_state(window_state_flags());
         app.exit(0);
     }

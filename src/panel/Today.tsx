@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { fmtClock, fmtDuration, fmtTime } from "../format";
 import { remainingOf, useSecondTick, useSnapshot } from "../hooks";
-import type { DayStats, SessionRow, Snapshot } from "../types";
-import { PHASE_LABEL } from "../types";
+import type { SessionRow, Snapshot, TodayStats } from "../types";
+import { DISTRACTION_CATEGORIES, PHASE_LABEL } from "../types";
+import { Bars, ratingFace } from "./History";
 
 export function Today() {
   const snap = useSnapshot();
@@ -26,6 +27,11 @@ export function Today() {
             <div className="eyebrow">Today · {date}</div>
             <div className="hero-figure">{fmtDuration(liveFocus)}</div>
             <div className="hero-caption">focused{goal > 0 && <> of {fmtDuration(goal)} goal</>}</div>
+            <div className="streak-chip" title={`Best: ${stats.streak.best} days`}>
+              {stats.streak.current > 0
+                ? `🔥 ${stats.streak.current}-day streak${stats.streak.todayDone ? "" : " · finish a session today to keep it"}`
+                : "Finish a session to start a streak"}
+            </div>
           </div>
           <NowBadge snap={snap} now={now} />
         </div>
@@ -37,6 +43,7 @@ export function Today() {
         <Stat label="Completed" value={stats.completed} tone="good" />
         <Stat label="Interrupted" value={stats.interrupted} hint="paused at least once" />
         <Stat label="Abandoned" value={stats.abandoned} tone={stats.abandoned ? "warn" : undefined} hint="ended early" />
+        <Stat label="Distractions" value={stats.distractions} hint="logged" />
         <Stat label="Break time" value={fmtDuration(stats.breakMs)} />
         <Stat label="Avg session" value={stats.focusSessions ? fmtDuration(stats.avgFocusMs) : "—"} />
         <Stat label="Longest focus" value={stats.focusSessions ? fmtDuration(stats.longestFocusMs) : "—"} />
@@ -50,6 +57,27 @@ export function Today() {
         <Timeline sessions={stats.sessions} snap={snap} now={now} />
       </section>
 
+      <div className="two-col">
+        <section className="card">
+          <h3>Projects</h3>
+          <Bars rows={stats.projects} format={fmtDuration} label={(n) => (n ? `#${n}` : "No project")} empty="Type #project after a task to tag it." />
+        </section>
+        <section className="card">
+          <h3>Distractions</h3>
+          {stats.distractionList.length === 0 ? (
+            <div className="empty">None logged today.</div>
+          ) : (
+            <div className="dlist">
+              {stats.distractionList.map((d) => (
+                <span key={d.id}>
+                  {fmtTime(d.at)} · {DISTRACTION_CATEGORIES.find((c) => c.id === d.category)?.label ?? "unspecified"}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+
       <section className="card">
         <h3>Sessions</h3>
         <SessionLog sessions={stats.sessions} />
@@ -59,15 +87,19 @@ export function Today() {
 }
 
 /** Refetch when a block finishes, the day rolls over, or every minute. */
-function useTodayStats(snap: Snapshot | null): DayStats | null {
-  const [stats, setStats] = useState<DayStats | null>(null);
-  const key = snap ? `${snap.completedToday}|${snap.phase}|${snap.run}|${new Date().toDateString()}` : "";
+function useTodayStats(snap: Snapshot | null): TodayStats | null {
+  const [stats, setStats] = useState<TodayStats | null>(null);
+  const key = snap ? `${snap.completedToday}|${snap.phase}|${snap.run}|${snap.distractionsToday}|${new Date().toDateString()}` : "";
   useEffect(() => {
     api.todayStats().then(setStats);
   }, [key]);
   useEffect(() => {
     const id = window.setInterval(() => api.todayStats().then(setStats), 60_000);
-    return () => clearInterval(id);
+    const off = api.onStats(() => api.todayStats().then(setStats));
+    return () => {
+      clearInterval(id);
+      off();
+    };
   }, []);
   return stats;
 }
@@ -169,12 +201,18 @@ function SessionLog({ sessions }: { sessions: SessionRow[] }) {
         <li key={s.id} className={`${s.kind} ${s.status}`}>
           <span className="log-time">{fmtTime(s.startedAt)}</span>
           <span className={`log-kind ${s.kind}`}>{PHASE_LABEL[s.kind]}</span>
-          <span className="log-task">{s.task ?? ""}</span>
+          <span className="log-task">
+            {s.task ?? ""}
+            {s.project && <span className="log-project">#{s.project}</span>}
+          </span>
           <span className="log-dur">
             {fmtDuration(s.actualMs)}
             {s.pauseCount > 0 && <em title={`Paused ${s.pauseCount}×`}> ⏸{s.pauseCount}</em>}
           </span>
-          <span className={`log-status ${s.status}`}>{s.status === "completed" ? "✓" : "ended early"}</span>
+          <span className={`log-status ${s.status}`}>
+            {s.status === "completed" ? "✓" : "ended early"}
+            {s.rating && <span className="log-rating" title="Your rating">{ratingFace(s.rating)}</span>}
+          </span>
         </li>
       ))}
     </ol>

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Clock and panel windows",
-  "windows": ["clock", "panel"],
+  "windows": ["clock", "panel", "quick"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
