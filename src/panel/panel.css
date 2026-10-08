@@ -461,3 +461,13 @@ button.primary:disabled, .ghost:disabled { opacity: 0.5; cursor: default; }
 .insight-list li:first-child { border-top: 0; padding-top: 0; }
 .insight-list p { margin: 0; }
 .insight-list p:first-child { font-size: 14px; }
+
+/* ── weekly email ────────────────────────────────────────────────────── */
+input.text {
+  font: 13px/1.3 inherit; font-family: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; width: 210px;
+}
+input.text:focus, .app-add input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: 0; }
+button.link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+button.link:hover { text-decoration: underline; }
+.error-inline { color: var(--warn); }

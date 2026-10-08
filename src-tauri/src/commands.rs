@@ -116,6 +116,74 @@ pub async fn helper_status(state: State<'_, AppState>) -> Result<HelperStatus, (
     })
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmailStatus {
+    has_password: bool,
+    status: crate::report::ReportStatus,
+    /// Next scheduled send, epoch ms.
+    next_send: i64,
+}
+
+#[tauri::command]
+pub async fn email_status(app: AppHandle) -> Result<EmailStatus, ()> {
+    let settings = app.state::<AppState>().0.lock().map(|e| e.settings.clone()).unwrap_or_default();
+    let has_password = !settings.email_from.is_empty() && crate::report::keychain_get(&settings.email_from).is_some();
+    use chrono::{Datelike, Duration, Local, TimeZone};
+    let now = Local::now();
+    let monday = now.date_naive() - Duration::days(now.weekday().num_days_from_monday() as i64);
+    let at = |d: chrono::NaiveDate| {
+        Local
+            .from_local_datetime(&d.and_hms_opt(settings.email_hour, 0, 0).unwrap_or_default())
+            .earliest()
+            .map(|t| t.timestamp_millis())
+            .unwrap_or(0)
+    };
+    let this_week = at(monday + Duration::days(settings.email_day as i64));
+    let next_send = if this_week > now.timestamp_millis() { this_week } else { at(monday + Duration::days(7 + settings.email_day as i64)) };
+    Ok(EmailStatus { has_password, status: companion::report_status(&app), next_send })
+}
+
+#[tauri::command]
+pub fn set_email_password(state: State<AppState>, password: String) -> Result<(), String> {
+    let from = engine(&state).settings.email_from.clone();
+    if from.is_empty() {
+        return Err("Enter your Gmail address first.".into());
+    }
+    crate::report::keychain_set(&from, password.trim())
+}
+
+#[tauri::command]
+pub async fn send_test_email(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || companion::send_test_report(&app))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Write the email to a file and open it in the default browser.
+#[tauri::command]
+pub fn preview_email(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    let now = now_ms();
+    let (mut email, empty) = engine(&state).render_report(-1, now);
+    if empty {
+        email = engine(&state).render_report(0, now).0;
+    }
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("weekly-email-preview.html");
+    let html = email.html.replacen("<body", &format!("<title>{}</title><body", email.subject.replace('<', "&lt;")), 1);
+    std::fs::write(&path, html).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("/usr/bin/open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_app_passwords() {
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("/usr/bin/open").arg("https://myaccount.google.com/apppasswords").spawn();
+}
+
 #[tauri::command]
 pub async fn install_dnd_shortcuts() -> Result<(), String> {
     sysmac::install_focus_shortcuts()

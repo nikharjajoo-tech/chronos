@@ -3,6 +3,7 @@
 
 use crate::analytics::{self, Named, PeriodStats, Streak};
 use crate::insights::{self, Insight, Score, Suggestion};
+use crate::report::{self, Email, ReportData};
 use crate::db::{DayStats, Db, DistractionRow};
 use crate::settings::Settings;
 use crate::timer::{EndStatus, Finished, Phase, RunState, Timer};
@@ -267,6 +268,33 @@ impl Engine {
             suggestion,
             sample: recent.iter().filter(|s| s.is_focus()).count(),
         }
+    }
+
+    /// Everything for the weekly email about the week `offset` weeks back.
+    pub fn report_data(&self, offset: i32, now: i64) -> ReportData {
+        let score = self.week_score(offset, None, now);
+        let prev_score = self.week_score(offset - 1, None, now);
+        let mover = match (&score, &prev_score) {
+            (Some(a), Some(b)) => insights::biggest_mover(a, b).map(|(l, d)| (l.to_string(), d)),
+            _ => None,
+        };
+        let view = self.insights_view(now);
+        ReportData {
+            period: self.period("week", offset, now),
+            score,
+            prev_score,
+            mover,
+            insights: view.insights,
+            suggestion: view.suggestion,
+            goal_ms: self.settings.daily_goal_min as i64 * 60_000,
+        }
+    }
+
+    pub fn render_report(&self, offset: i32, now: i64) -> (Email, bool) {
+        let data = self.report_data(offset, now);
+        let empty = data.period.totals.focus_sessions == 0;
+        let fmt = |t: i64, f: &str| Local.timestamp_millis_opt(t).single().map(|d| d.format(f).to_string()).unwrap_or_default();
+        (report::render(&data, &fmt), empty)
     }
 
     /// Accept or decline the current suggestion. Either way it never comes back.

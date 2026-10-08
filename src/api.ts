@@ -3,7 +3,7 @@
 // screenshotted without the desktop shell. Mock state is seeded from the URL,
 // e.g. ?view=clock&phase=focus&run=running&remaining=1122&task=Write
 
-import type { Action, AppInfo, HelperStatus, InsightsView, PeriodStats, Quick, Settings, Snapshot, TodayStats } from "./types";
+import type { Action, AppInfo, EmailStatus, HelperStatus, InsightsView, PeriodStats, Quick, Settings, Snapshot, TodayStats } from "./types";
 import { MINUTE } from "./format";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
@@ -25,6 +25,11 @@ export interface Backend {
   quickClose(): Promise<void>;
   helperStatus(): Promise<HelperStatus>;
   installDndShortcuts(): Promise<void>;
+  emailStatus(): Promise<EmailStatus>;
+  setEmailPassword(password: string): Promise<void>;
+  sendTestEmail(): Promise<string>;
+  previewEmail(): Promise<void>;
+  openAppPasswords(): Promise<void>;
   onQuick(cb: (q: Quick) => void): Unlisten;
   onStats(cb: () => void): Unlisten;
   getSettings(): Promise<Settings>;
@@ -82,6 +87,11 @@ function tauriBackend(): Backend {
     quickClose: () => invoke("quick_close"),
     helperStatus: () => invoke("helper_status"),
     installDndShortcuts: () => invoke("install_dnd_shortcuts"),
+    emailStatus: () => invoke("email_status"),
+    setEmailPassword: (password) => invoke("set_email_password", { password }),
+    sendTestEmail: () => invoke("send_test_email"),
+    previewEmail: () => invoke("preview_email"),
+    openAppPasswords: () => invoke("open_app_passwords"),
     onQuick: (cb) => listen("chronos://quick", cb),
     onStats: (cb) => listen("chronos://stats", cb),
     getSettings: () => invoke("get_settings"),
@@ -114,6 +124,7 @@ function mockBackend(): Backend {
     scale: 1, launchAtLogin: true, showInDock: false,
     awayMin: 5, autoHide: true, autoHideApps: ["CptHost", "screencaptureui", "obs"], dnd: false,
     menuBarTimer: "off", distractionShortcut: "Control+Alt+D", reflection: true, notifications: true, companion: true,
+    emailReport: q.has("email"), emailTo: q.has("email") ? "you@gmail.com" : "", emailFrom: q.has("email") ? "you@gmail.com" : "", emailDay: 0, emailHour: 9,
     sound: true, volume: 0.6, dailyGoalMin: 180,
   };
   const phase = (q.get("phase") as Snapshot["phase"]) ?? "focus";
@@ -250,6 +261,11 @@ function mockBackend(): Backend {
     quickClose: async () => {},
     helperStatus: async () => ({ dndInstalled: false, running: [] }),
     installDndShortcuts: async () => {},
+    emailStatus: async () => ({ hasPassword: q.has("pw"), status: { lastWeek: null, lastSentAt: null, lastAttemptAt: null, lastError: null }, nextSend: Date.now() + 4 * 86_400_000 }),
+    setEmailPassword: async () => {},
+    sendTestEmail: async () => "Sent to you@gmail.com.",
+    previewEmail: async () => {},
+    openAppPasswords: async () => {},
     onQuick: () => () => {},
     onStats: () => () => {},
     getSettings: async () => settings,

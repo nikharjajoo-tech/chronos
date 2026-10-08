@@ -68,6 +68,12 @@ export interface Settings {
   reflection: boolean;
   notifications: boolean;
   companion: boolean;
+  emailReport: boolean;
+  emailTo: string;
+  emailFrom: string;
+  /** 0 = Monday … 6 = Sunday */
+  emailDay: number;
+  emailHour: number;
   sound: boolean;
   volume: number;
   dailyGoalMin: number;
@@ -192,6 +198,12 @@ export interface PeriodStats {
 export type Quick =
   | { kind: "distraction"; id: number; countToday: number; sessionNumber: number | null }
   | { kind: "reflection"; sessionId: number; minutes: number; task: string | null; project: string | null };
+
+export interface EmailStatus {
+  hasPassword: boolean;
+  status: { lastWeek: string | null; lastSentAt: number | null; lastAttemptAt: number | null; lastError: string | null };
+  nextSend: number;
+}
 
 export interface HelperStatus {
   dndInstalled: boolean;

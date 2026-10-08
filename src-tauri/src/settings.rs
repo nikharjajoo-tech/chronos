@@ -89,6 +89,17 @@ pub struct Settings {
     /// Occasional one-line nudges on the clock ("take a proper break").
     pub companion: bool,
 
+    /// Weekly summary by email (opt-in). The Gmail app password lives in
+    /// the macOS Keychain, never here.
+    pub email_report: bool,
+    pub email_to: String,
+    /// The Gmail account that sends it.
+    pub email_from: String,
+    /// 0 = Monday … 6 = Sunday
+    pub email_day: u32,
+    /// Local hour, 0–23.
+    pub email_hour: u32,
+
     pub sound: bool,
     pub volume: f64,
 
@@ -124,6 +135,11 @@ impl Default for Settings {
             reflection: true,
             notifications: true,
             companion: true,
+            email_report: false,
+            email_to: String::new(),
+            email_from: String::new(),
+            email_day: 0,
+            email_hour: 9,
             sound: true,
             volume: 0.6,
             daily_goal_min: 180,
@@ -166,6 +182,10 @@ impl Settings {
             self.distraction_shortcut = Settings::default().distraction_shortcut;
         }
         self.away_min = self.away_min.min(60);
+        self.email_day = self.email_day.min(6);
+        self.email_hour = self.email_hour.min(23);
+        self.email_to = self.email_to.trim().chars().take(254).collect();
+        self.email_from = self.email_from.trim().chars().take(254).collect();
         if !MENU_BAR_TIMER.contains(&self.menu_bar_timer.as_str()) {
             self.menu_bar_timer = "off".into();
         }

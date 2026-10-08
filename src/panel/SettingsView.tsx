@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { prettyShortcut, shortcutFromEvent } from "../format";
 import { useSettings } from "../hooks";
-import type { AppInfo, HelperStatus, Settings, Widget } from "../types";
+import type { AppInfo, EmailStatus, HelperStatus, Settings, Widget } from "../types";
 
 const PRESETS = [
   { id: "standard", label: "Standard", sub: "25 / 5" },
@@ -258,6 +258,8 @@ export function SettingsView() {
         />
       </section>
 
+      <WeeklyEmail settings={settings} save={save} />
+
       <section className="card">
         <h3>Startup</h3>
         <Toggle
@@ -301,7 +303,7 @@ export function SettingsView() {
       <section className="card">
         <h3>Your data</h3>
         <p className="note">
-          Everything stays on this computer in a local SQLite database. There's no account and no network access.
+          Everything stays on this computer in a local SQLite database. There's no account; the only thing that ever leaves your Mac is the weekly email, if you turn it on.
         </p>
         {info && (
           <Row label="Location">
@@ -314,6 +316,114 @@ export function SettingsView() {
         {info && <p className="note muted">Chronos {info.version}</p>}
       </section>
     </div>
+  );
+}
+
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const hourLabel = (h: number) => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" });
+
+function WeeklyEmail({ settings, save }: { settings: Settings; save: (p: Partial<Settings>, immediate?: boolean) => void }) {
+  const [status, setStatus] = useState<EmailStatus | null>(null);
+  const [pw, setPw] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const refresh = () => api.emailStatus().then(setStatus);
+  useEffect(() => {
+    refresh();
+    return api.onStats(refresh);
+  }, [settings.emailFrom]);
+
+  const run = async (fn: () => Promise<string | void>, okText?: string) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await fn();
+      setMsg({ ok: true, text: (r as string) || okText || "Done." });
+    } catch (e) {
+      setMsg({ ok: false, text: String(e) });
+    }
+    setBusy(false);
+    refresh();
+  };
+
+  const st = status?.status;
+  return (
+    <section className="card">
+      <h3>Weekly email</h3>
+      <Toggle
+        label="Email me a weekly summary"
+        hint="Score, totals vs the week before, focus per day, projects, insights and one suggestion. Never task names."
+        checked={settings.emailReport}
+        onChange={(v) => save({ emailReport: v }, true)}
+      />
+      {settings.emailReport && (
+        <>
+          <Row label="Send to">
+            <input className="text" type="email" placeholder="you@example.com" value={settings.emailTo} onChange={(e) => save({ emailTo: e.target.value })} />
+          </Row>
+          <Row label="Send from (Gmail)">
+            <input className="text" type="email" placeholder="you@gmail.com" value={settings.emailFrom} onChange={(e) => save({ emailFrom: e.target.value })} />
+          </Row>
+          <Row label="Gmail app password">
+            {status?.hasPassword && !pw ? (
+              <span className="status-ok">✓ Saved in Keychain</span>
+            ) : null}
+            <input
+              className="text"
+              type="password"
+              placeholder={status?.hasPassword ? "Replace…" : "abcd efgh ijkl mnop"}
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              autoComplete="off"
+            />
+            <button className="ghost" disabled={!pw || !settings.emailFrom || busy} onClick={() => run(() => api.setEmailPassword(pw).then(() => setPw("")), "Saved in your Keychain.")}>
+              Save
+            </button>
+          </Row>
+          <p className="note">
+            Gmail needs an <b>app password</b> (not your normal one). It requires 2-Step Verification.{" "}
+            <button className="link" onClick={() => api.openAppPasswords()}>Create one at Google →</button> Name it “Chronos”, copy the
+            16 letters here. It's stored only in the macOS Keychain.
+          </p>
+          <Row label="When">
+            <select value={settings.emailDay} onChange={(e) => save({ emailDay: +e.target.value }, true)}>
+              {DAYS.map((d, i) => (
+                <option key={d} value={i}>{d}s</option>
+              ))}
+            </select>
+            <select value={settings.emailHour} onChange={(e) => save({ emailHour: +e.target.value }, true)}>
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>{hourLabel(h)}</option>
+              ))}
+            </select>
+          </Row>
+          <div className="row">
+            <label className="muted">
+              {st?.lastError ? (
+                <span className="error-inline">Last attempt failed: {st.lastError}</span>
+              ) : st?.lastSentAt ? (
+                `Last sent ${new Date(st.lastSentAt).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}`
+              ) : status ? (
+                `Next: ${new Date(status.nextSend).toLocaleString([], { weekday: "long", hour: "numeric", minute: "2-digit" })}`
+              ) : null}
+            </label>
+            <div className="row-controls">
+              <button className="ghost" disabled={busy} onClick={() => run(() => api.previewEmail(), "Opened the preview in your browser.")}>
+                Preview
+              </button>
+              <button className="ghost" disabled={busy || !status?.hasPassword || !settings.emailTo} onClick={() => run(() => api.sendTestEmail())}>
+                {busy ? "Sending…" : "Send test now"}
+              </button>
+            </div>
+          </div>
+          {msg && <p className={msg.ok ? "note status-ok" : "error"}>{msg.text}</p>}
+          <p className="note muted">
+            This is the only thing in Chronos that sends data off your Mac, and only while this is on. If your Mac is off at send time,
+            it goes out at the next chance; a failed send retries every 30 minutes.
+          </p>
+        </>
+      )}
+    </section>
   );
 }
 

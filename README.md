@@ -92,6 +92,12 @@ Settings, which also has a size slider (60–200%).
 - **One suggestion at a time** (longer or shorter sessions, Do Not Disturb, auto-start breaks, protect your best hours), with one-click apply. Declined suggestions never come back.
 - **Companion lines** on the clock after a session, at most one every 90 minutes: daily goal hit, a long run without a real break, or skipped breaks.
 
+**Weekly email** (opt-in, Settings → Weekly email)
+- A summary of the previous week, sent through your Gmail every Monday at 9 AM (day and time are adjustable): score and what moved it, totals vs the week before, focus per day, projects, top insights and one suggestion. Task names are never included.
+- Setup: turn 2-Step Verification on for your Google account, create an [app password](https://myaccount.google.com/apppasswords), and paste it into Settings. It's stored only in the macOS Keychain.
+- If the Mac is off at send time, the email goes out at the next chance. A failed send retries every 30 minutes. Weeks with no sessions are skipped. Preview and Send test now buttons are included.
+- This is the only feature that sends data off your Mac, and only while it's on.
+
 ## Tests
 
 ```bash
@@ -102,4 +108,4 @@ npm run test:rust  # timer, away pauses, database, analytics, score, insights, s
 ## Privacy
 
 All data lives in `~/Library/Application Support/com.chronos.desk/chronos.sqlite3`.
-There is no account, no telemetry and no network access.
+There is no account and no telemetry. The only network access is the optional weekly email, sent through your own Gmail.

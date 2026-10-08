@@ -4,6 +4,7 @@ pub mod companion;
 pub mod db;
 pub mod engine;
 pub mod insights;
+pub mod report;
 pub mod settings;
 pub mod shell;
 pub mod sysmac;
@@ -42,6 +43,11 @@ pub fn run() {
             commands::quick_close,
             commands::helper_status,
             commands::install_dnd_shortcuts,
+            commands::email_status,
+            commands::set_email_password,
+            commands::send_test_email,
+            commands::preview_email,
+            commands::open_app_passwords,
             commands::get_settings,
             commands::set_settings,
             commands::toggle_clock,

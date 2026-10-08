@@ -3,11 +3,13 @@
 //! and the small popup used for distraction logging and reflections.
 
 use crate::engine::{day_bounds, now_ms, Snapshot};
+use crate::report;
 use crate::settings::Settings;
 use crate::shell::{self, CLOCK};
 use crate::sysmac;
 use crate::timer::{EndStatus, Finished, Phase, RunState, Timer, MINUTE};
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -111,6 +113,11 @@ pub fn spawn_watchdog(app: AppHandle) {
             set_tray_title(&app, title);
             if n % 2 == 0 {
                 auto_hide_check(&app, &settings);
+            }
+            // Weekly email: check once a minute (and soon after launch).
+            if settings.email_report && n % 120 == 6 {
+                let app = app.clone();
+                std::thread::spawn(move || maybe_send_report(&app));
             }
         }
     });
@@ -225,6 +232,95 @@ pub fn dnd_off_now(app: &AppHandle) {
     if comp(app, |c| c.dnd_on.take()) == Some(true) {
         sysmac::run_shortcut_blocking(sysmac::FOCUS_OFF_SHORTCUT);
     }
+}
+
+// ── weekly email ───────────────────────────────────────────────────────────
+
+const K_REPORT: &str = "report_status";
+static SENDING: AtomicBool = AtomicBool::new(false);
+
+pub fn report_status(app: &AppHandle) -> report::ReportStatus {
+    shell::with_engine(app, |e| e.db.kv_get(K_REPORT).unwrap_or_default())
+}
+
+fn save_report_status(app: &AppHandle, s: &report::ReportStatus) {
+    shell::with_engine(app, |e| {
+        let _ = e.db.kv_set(K_REPORT, s);
+    });
+}
+
+/// Send last week's summary if it's due and hasn't gone out yet. Retries a
+/// failure every 30 minutes; skips weeks with no sessions.
+pub fn maybe_send_report(app: &AppHandle) {
+    if SENDING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let _guard = scopeguard(|| SENDING.store(false, Ordering::SeqCst));
+    let now = now_ms();
+    let settings = shell::with_engine(app, |e| e.settings.clone());
+    if !settings.email_report || settings.email_to.is_empty() || settings.email_from.is_empty() {
+        return;
+    }
+    let local = chrono::Local::now();
+    let Some(week) = report::due_week(local.date_naive(), chrono::Timelike::hour(&local), settings.email_day, settings.email_hour) else {
+        return;
+    };
+    let key = week.to_string();
+    let mut status = report_status(app);
+    if status.last_week.as_deref() == Some(key.as_str()) {
+        return;
+    }
+    if status.last_error.is_some() && status.last_attempt_at.is_some_and(|t| now - t < 30 * MINUTE) {
+        return;
+    }
+    let (email, empty) = shell::with_engine(app, |e| e.render_report(-1, now));
+    status.last_attempt_at = Some(now);
+    if empty {
+        status.last_week = Some(key);
+        status.last_error = None;
+    } else {
+        match report::keychain_get(&settings.email_from) {
+            None => status.last_error = Some("Add your Gmail app password in Settings → Weekly email.".into()),
+            Some(pw) => match report::send_gmail(&settings.email_from, &pw, &settings.email_to, &email) {
+                Ok(()) => {
+                    status.last_week = Some(key);
+                    status.last_sent_at = Some(now);
+                    status.last_error = None;
+                }
+                Err(e) => status.last_error = Some(e),
+            },
+        }
+    }
+    save_report_status(app, &status);
+    let _ = app.emit(shell::EV_STATS, ());
+}
+
+/// Send the summary right now, to check the setup works. Uses last week,
+/// or this week so far if last week is empty.
+pub fn send_test_report(app: &AppHandle) -> Result<String, String> {
+    let now = now_ms();
+    let settings = shell::with_engine(app, |e| e.settings.clone());
+    if settings.email_to.is_empty() || settings.email_from.is_empty() {
+        return Err("Fill in both email addresses first.".into());
+    }
+    let pw = report::keychain_get(&settings.email_from).ok_or("Save your Gmail app password first.")?;
+    let (mut email, empty) = shell::with_engine(app, |e| e.render_report(-1, now));
+    if empty {
+        email = shell::with_engine(app, |e| e.render_report(0, now)).0;
+    }
+    email.subject = format!("[Test] {}", email.subject);
+    report::send_gmail(&settings.email_from, &pw, &settings.email_to, &email)?;
+    Ok(format!("Sent to {}.", settings.email_to))
+}
+
+struct Guard<F: FnMut()>(F);
+impl<F: FnMut()> Drop for Guard<F> {
+    fn drop(&mut self) {
+        (self.0)();
+    }
+}
+fn scopeguard<F: FnMut()>(f: F) -> Guard<F> {
+    Guard(f)
 }
 
 // ── distractions & the quick popup ─────────────────────────────────────────
