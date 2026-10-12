@@ -210,14 +210,18 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
+    /// Writes a block that ended, with its task credit (none for a cancelled
+    /// block), in one transaction.
     pub fn finish_session(&self, f: &Finished, preset: &str) -> Result<i64> {
+        let tx = self.conn.unchecked_transaction()?;
         let id = match f.session_id {
             Some(id) => id,
             None => self.insert_session(f.phase, f.started_at, f.planned_ms, f.task.as_deref(), f.project.as_deref(), preset)?,
         };
         self.conn.execute(
             "UPDATE sessions SET status = ?2, ended_at = ?3, planned_ms = ?4, actual_ms = ?5,
-                    pause_count = ?6, adjust_ms = ?7, task = ?8, project = ?9, away_count = ?10
+                    pause_count = ?6, adjust_ms = ?7, task = ?8, project = ?9, away_count = ?10,
+                    task_id = (SELECT id FROM tasks WHERE id = ?11)
              WHERE id = ?1",
             params![
                 id,
@@ -229,9 +233,14 @@ impl Db {
                 f.adjust_ms,
                 f.task,
                 f.project,
-                f.away_count
+                f.away_count,
+                f.task_id
             ],
         )?;
+        if f.status != EndStatus::Cancelled {
+            self.credit_tasks(id, &f.task_ms)?;
+        }
+        tx.commit()?;
         Ok(id)
     }
 
@@ -402,6 +411,14 @@ impl Db {
         ))?;
         let rows = stmt.query_map([bucket.as_str()], |r| task_row(r, today_start))?;
         rows.collect()
+    }
+
+    pub fn open_count(&self, bucket: Bucket) -> Result<u32> {
+        self.conn.query_row(
+            "SELECT COUNT(*) FROM tasks WHERE status = 'open' AND bucket = ?1",
+            [bucket.as_str()],
+            |r| r.get(0),
+        )
     }
 
     pub fn update_task(&self, id: i64, t: &ParsedTask) -> Result<()> {
@@ -594,6 +611,8 @@ mod tests {
             adjust_ms: 0,
             task: None,
             project: None,
+            task_id: None,
+            task_ms: Vec::new(),
         }
     }
 
@@ -817,6 +836,10 @@ mod tests {
         assert_eq!(credits, 1, "only b's credit is left");
 
         db.restore_task(&gone).unwrap();
+        let mut f = finished(Phase::Focus, EndStatus::Cancelled, T0, 0, 0);
+        f.task_ms = vec![(b, 30_000)];
+        db.finish_session(&f, "standard").unwrap();
+        assert_eq!(db.task(b, T0).unwrap().unwrap().spent_ms, 15 * MINUTE, "cancelled blocks credit nothing");
         let back = db.task(a, T0).unwrap().unwrap();
         assert_eq!((back.title, back.position, back.spent_ms), (gone.title, gone.position, 0));
         assert_eq!(db.delete_task(9999, T0).unwrap(), None);

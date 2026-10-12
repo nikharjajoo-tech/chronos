@@ -6,7 +6,7 @@ use crate::insights::{self, Insight, Score, Suggestion};
 use crate::report::{self, Email, ReportData};
 use crate::db::{DayStats, Db, DistractionRow};
 use crate::settings::Settings;
-use crate::tasks;
+use crate::tasks::{self, Bucket, TaskRow};
 use crate::timer::{EndStatus, Finished, Phase, RunState, Timer};
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime, TimeZone, Timelike};
 use std::collections::BTreeSet;
@@ -29,8 +29,16 @@ pub enum Action {
     Adjust(i64),
     SetRemaining(i64),
     SwitchPhase(Phase),
+    /// Typed on the clock: an open Today task with that title goes live, or a
+    /// new one is added to the top of Today. Empty = free focus.
     SetTask(Option<String>),
     Preset(String),
+    /// Make a task live (moving it to the top of Today if needed) and focus on it.
+    StartTask(i64),
+    /// Tick off the live task; the next Today task goes live, the timer keeps going.
+    DoneTask,
+    /// "Not now": the live task goes to the bottom of Today, the next one goes live.
+    NextTask,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -45,6 +53,12 @@ pub struct Snapshot {
     pub long_every: u32,
     pub task: Option<String>,
     pub project: Option<String>,
+    pub task_id: Option<i64>,
+    pub task_estimate_ms: Option<i64>,
+    /// All focus time on the live task, as of `now`.
+    pub task_spent_ms: i64,
+    /// Open tasks in Today.
+    pub today_open: u32,
     pub preset: String,
     pub session_number: u32,
     pub completed_today: u32,
@@ -377,6 +391,7 @@ impl Engine {
     pub fn snapshot(&self, now: i64) -> Snapshot {
         let today = self.today(now);
         let t = &self.timer;
+        let live = t.task_id.and_then(|id| self.db.task(id, day_bounds(now).0).ok().flatten());
         Snapshot {
             phase: t.phase,
             run: t.run,
@@ -387,6 +402,10 @@ impl Engine {
             long_every: self.settings.long_every,
             task: t.task.clone(),
             project: t.project.clone(),
+            task_id: live.as_ref().map(|r| r.id),
+            task_estimate_ms: live.as_ref().and_then(|r| r.estimate_ms),
+            task_spent_ms: live.as_ref().map_or(0, |r| r.spent_ms + t.task_credit(r.id, now)),
+            today_open: self.db.open_count(Bucket::Today).unwrap_or(0),
             preset: self.settings.preset.clone(),
             session_number: today.completed + u32::from(t.phase == Phase::Focus),
             completed_today: today.completed,
@@ -407,7 +426,7 @@ impl Engine {
         self.away_notice = None;
         self.companion.line = None;
         // Skipping a break you never started is the most common way to skip one.
-        let leaving_break = matches!(action, Action::Skip | Action::SwitchPhase(Phase::Focus));
+        let leaving_break = matches!(action, Action::Skip | Action::SwitchPhase(Phase::Focus) | Action::StartTask(_));
         if leaving_break && self.timer.phase != Phase::Focus && self.timer.run == RunState::Idle {
             self.companion.skipped_breaks += 1;
         }
@@ -422,8 +441,8 @@ impl Engine {
             }
             Action::Reset => self.timer.reset(now, &d),
             Action::Restart => {
-                let f = self.timer.reset(now, &d);
-                self.record(f.as_ref());
+                let mut f = self.timer.reset(now, &d);
+                self.record(&mut f);
                 if let Some(f) = &f {
                     self.remember(f, now);
                 }
@@ -439,12 +458,23 @@ impl Engine {
             }
             Action::SwitchPhase(p) => self.timer.switch_phase(p, now, &d),
             Action::SetTask(text) => {
-                let (task, project) = split_project(text.as_deref().unwrap_or(""));
-                if let Some(id) = self.timer.session_id {
-                    let _ = self.db.set_session_task(id, task.as_deref(), project.as_deref());
+                let text = text.unwrap_or_default();
+                match tasks::parse(&text) {
+                    Some(parsed) => {
+                        let today = self.db.open_tasks(Bucket::Today, day_bounds(now).0).unwrap_or_default();
+                        let wanted = parsed.title.to_lowercase();
+                        let row = match today.into_iter().find(|r| r.title.to_lowercase() == wanted) {
+                            Some(row) => Some(row),
+                            None => self.db.insert_task(&parsed, Bucket::Today, true, now).ok().and_then(|id| self.task_row(id, now)),
+                        };
+                        self.go_live(row.as_ref(), now);
+                    }
+                    None => {
+                        // Nothing but a #tag (or nothing): free focus.
+                        self.go_live(None, now);
+                        self.timer.project = tasks::split_tags(&text).1;
+                    }
                 }
-                self.timer.task = task;
-                self.timer.project = project;
                 None
             }
             Action::Preset(id) => {
@@ -454,8 +484,102 @@ impl Engine {
                 }
                 None
             }
+            Action::StartTask(id) => {
+                let Some(row) = self.task_row(id, now) else { return self.after(None, now) };
+                if row.done {
+                    let _ = self.db.set_task_done(id, false, now);
+                }
+                if row.bucket != Bucket::Today {
+                    let first = self.top_today(now).map(|r| r.id);
+                    let _ = self.db.move_task(id, Bucket::Today, first, now);
+                }
+                let mut f = None;
+                if self.timer.phase != Phase::Focus {
+                    f = self.timer.switch_phase(Phase::Focus, now, &d);
+                    self.record(&mut f);
+                    if let Some(f) = &f {
+                        self.remember(f, now);
+                    }
+                }
+                let row = self.task_row(id, now);
+                self.go_live(row.as_ref(), now);
+                if self.timer.run != RunState::Running {
+                    self.start(now);
+                }
+                self.persist();
+                return f;
+            }
+            Action::DoneTask => {
+                if let Some(id) = self.timer.task_id {
+                    let _ = self.db.set_task_done(id, true, now);
+                    self.reconcile_live(now);
+                }
+                None
+            }
+            Action::NextTask => {
+                if let Some(id) = self.timer.task_id {
+                    let _ = self.db.move_task(id, Bucket::Today, None, now);
+                    let next = self.top_today(now);
+                    self.go_live(next.as_ref(), now);
+                }
+                None
+            }
         };
         self.after(finished, now)
+    }
+
+    /// Open tasks plus tasks done in the last `done_days` local days, with
+    /// the running block's credit included.
+    pub fn tasks_list(&self, done_days: u32, now: i64) -> Vec<TaskRow> {
+        let today = local_date(now);
+        let done_since = match done_days {
+            0 => i64::MAX,
+            n => local_midnight(today - Duration::days(n as i64 - 1)),
+        };
+        let mut rows = self.db.tasks_list(done_since, local_midnight(today)).unwrap_or_default();
+        for r in &mut rows {
+            r.spent_ms += self.timer.task_credit(r.id, now);
+        }
+        rows
+    }
+
+    /// Call after any change to the task list. Keeps the live task in step:
+    /// a deleted one loses this block's time, one that was ticked off or moved
+    /// out of Today is credited, and either way the next Today task takes over.
+    /// An edited title or #tag shows on the clock straight away.
+    pub fn reconcile_live(&mut self, now: i64) {
+        let Some(id) = self.timer.task_id else { return };
+        match self.db.task(id, day_bounds(now).0) {
+            Ok(Some(row)) if !row.done && row.bucket == Bucket::Today => self.go_live(Some(&row), now),
+            Ok(row) => {
+                if row.is_none() {
+                    self.timer.drop_task(id, now);
+                }
+                let next = self.top_today(now);
+                self.go_live(next.as_ref(), now);
+            }
+            Err(_) => {}
+        }
+        self.persist();
+    }
+
+    fn task_row(&self, id: i64, now: i64) -> Option<TaskRow> {
+        self.db.task(id, day_bounds(now).0).ok().flatten()
+    }
+
+    fn top_today(&self, now: i64) -> Option<TaskRow> {
+        self.db.open_tasks(Bucket::Today, day_bounds(now).0).ok()?.into_iter().next()
+    }
+
+    /// Makes `row` the live task (None = free focus), crediting the outgoing
+    /// one, and puts its title and #tag on the clock.
+    fn go_live(&mut self, row: Option<&TaskRow>, now: i64) {
+        self.timer.set_task(row.map(|r| r.id), now);
+        self.timer.task = row.map(|r| r.title.clone());
+        self.timer.project = row.and_then(|r| r.project.clone());
+        if let Some(id) = self.timer.session_id.filter(|_| self.timer.is_started()) {
+            let _ = self.db.set_session_task(id, self.timer.task.as_deref(), self.timer.project.as_deref());
+        }
     }
 
     /// Watchdog: completes the running block once its end time has passed.
@@ -474,8 +598,8 @@ impl Engine {
         self.persist();
     }
 
-    fn after(&mut self, finished: Option<Finished>, now: i64) -> Option<Finished> {
-        self.record(finished.as_ref());
+    fn after(&mut self, mut finished: Option<Finished>, now: i64) -> Option<Finished> {
+        self.record(&mut finished);
         if let Some(f) = &finished {
             self.remember(f, now);
         }
@@ -539,6 +663,19 @@ impl Engine {
             // First focus block of a new day starts a fresh cycle.
             self.timer.cycle = 0;
         }
+        if is_new && self.timer.phase == Phase::Focus {
+            // A new focus block works on the top Today task unless the live
+            // one is still open in Today. Text typed before the planner existed
+            // stays when Today is empty.
+            match self.timer.task_id.and_then(|id| self.task_row(id, now)).filter(|r| !r.done && r.bucket == Bucket::Today) {
+                Some(row) => self.go_live(Some(&row), now),
+                None => match self.top_today(now) {
+                    Some(top) => self.go_live(Some(&top), now),
+                    None if self.timer.task_id.is_some() => self.go_live(None, now),
+                    None => {}
+                },
+            }
+        }
         if self.timer.start(now) {
             self.timer.session_id = self
                 .db
@@ -554,10 +691,18 @@ impl Engine {
         }
     }
 
-    fn record(&self, f: Option<&Finished>) {
-        if let Some(f) = f {
-            let _ = self.db.finish_session(f, &self.settings.preset);
+    /// Writes a block that ended. A block that covered several tasks is
+    /// named after the one with the most time (the later one on a tie).
+    fn record(&self, f: &mut Option<Finished>) {
+        let Some(f) = f else { return };
+        if let Some(&(id, _)) = f.task_ms.iter().max_by_key(|(_, ms)| *ms) {
+            if let Some(row) = self.task_row(id, f.ended_at) {
+                f.task_id = Some(id);
+                f.task = Some(row.title);
+                f.project = row.project;
+            }
         }
+        let _ = self.db.finish_session(f, &self.settings.preset);
     }
 
     fn persist(&self) {
@@ -788,6 +933,193 @@ mod tests {
         assert!(e.respond_suggestion(&s.id, true, t));
         assert_eq!(e.settings.focus_min, 30);
         assert!(e.insights_view(t).suggestion.map_or(true, |x| x.id != s.id), "never repeated");
+    }
+
+    fn add_task(e: &Engine, text: &str, bucket: Bucket, t: i64) -> i64 {
+        e.db.insert_task(&tasks::parse(text).unwrap(), bucket, false, t).unwrap()
+    }
+
+    fn spent(e: &Engine, id: i64, t: i64) -> i64 {
+        e.tasks_list(1, t).into_iter().find(|r| r.id == id).map_or(-1, |r| r.spent_ms)
+    }
+
+    fn today_titles(e: &Engine, t: i64) -> Vec<String> {
+        e.db.open_tasks(Bucket::Today, day_bounds(t).0).unwrap().into_iter().map(|r| r.title).collect()
+    }
+
+    #[test]
+    fn live_task_top_today_goes_live_on_start() {
+        let mut e = engine();
+        let t0 = now();
+        let a = add_task(&e, "Prep slides 28m #job-search", Bucket::Today, t0);
+        add_task(&e, "Tailor resume", Bucket::Today, t0);
+        assert_eq!(e.snapshot(t0).task_id, None, "nothing is live until focus starts");
+        assert_eq!(e.snapshot(t0).today_open, 2);
+        e.apply(Action::Toggle, t0);
+        let s = e.snapshot(t0 + 10 * MINUTE);
+        assert_eq!((s.task_id, s.task.as_deref(), s.project.as_deref()), (Some(a), Some("Prep slides"), Some("job-search")));
+        assert_eq!((s.task_estimate_ms, s.task_spent_ms), (Some(28 * MINUTE), 10 * MINUTE));
+    }
+
+    #[test]
+    fn live_task_reordering_does_not_switch_it() {
+        let mut e = engine();
+        let t0 = now();
+        let a = add_task(&e, "a", Bucket::Today, t0);
+        let b = add_task(&e, "b", Bucket::Today, t0);
+        e.apply(Action::Toggle, t0);
+        e.db.move_task(b, Bucket::Today, Some(a), t0).unwrap();
+        e.reconcile_live(t0 + MINUTE);
+        assert_eq!(e.timer.task_id, Some(a));
+    }
+
+    #[test]
+    fn live_task_start_task_from_backlog_moves_to_top_of_today() {
+        let mut e = engine();
+        let t0 = now();
+        add_task(&e, "a", Bucket::Today, t0);
+        let z = add_task(&e, "z", Bucket::Backlog, t0);
+        e.apply(Action::StartTask(z), t0);
+        assert_eq!(today_titles(&e, t0), ["z", "a"]);
+        assert_eq!((e.timer.task_id, e.timer.run), (Some(z), RunState::Running));
+    }
+
+    #[test]
+    fn live_task_start_task_during_break_switches_to_focus() {
+        let mut e = engine();
+        let t0 = now();
+        let a = add_task(&e, "a", Bucket::Today, t0);
+        let b = add_task(&e, "b", Bucket::Today, t0);
+        e.apply(Action::Toggle, t0);
+        e.tick(t0 + 25 * MINUTE).unwrap();
+        assert_eq!((e.timer.phase, e.timer.task_id), (Phase::ShortBreak, Some(a)), "a is up next");
+        e.apply(Action::Toggle, t0 + 25 * MINUTE);
+        let f = e.apply(Action::StartTask(b), t0 + 27 * MINUTE).expect("the break ended");
+        assert_eq!(f.phase, Phase::ShortBreak);
+        assert_eq!((e.timer.phase, e.timer.run, e.timer.task_id), (Phase::Focus, RunState::Running, Some(b)));
+        assert_eq!(spent(&e, a, t0 + 30 * MINUTE), 25 * MINUTE, "no credit during the break");
+        assert_eq!(spent(&e, b, t0 + 30 * MINUTE), 3 * MINUTE);
+    }
+
+    #[test]
+    fn task_credit_is_split_at_a_switch_and_names_the_session() {
+        let mut e = engine();
+        let t0 = now();
+        let a = add_task(&e, "a #one", Bucket::Today, t0);
+        let b = add_task(&e, "b #two", Bucket::Today, t0);
+        e.apply(Action::Toggle, t0);
+        e.apply(Action::StartTask(b), t0 + 10 * MINUTE);
+        let f = e.tick(t0 + 25 * MINUTE).unwrap();
+        assert_eq!(f.task_ms, vec![(a, 10 * MINUTE), (b, 15 * MINUTE)]);
+        assert_eq!((spent(&e, a, t0), spent(&e, b, t0)), (10 * MINUTE, 15 * MINUTE));
+        let row = &e.today(t0).sessions[0];
+        assert_eq!((row.task.as_deref(), row.project.as_deref()), (Some("b"), Some("two")), "most time wins");
+        assert_eq!(e.today_full(t0).projects[0].name, "two");
+    }
+
+    #[test]
+    fn task_credit_skips_pauses_and_cancelled_blocks_but_keeps_abandoned_ones() {
+        let mut e = engine();
+        let t0 = now();
+        let a = add_task(&e, "a", Bucket::Today, t0);
+        e.apply(Action::Toggle, t0);
+        e.apply(Action::Reset, t0 + 30_000);
+        assert_eq!(spent(&e, a, t0 + MINUTE), 0, "cancelled");
+
+        e.apply(Action::Toggle, t0 + MINUTE);
+        e.apply(Action::Toggle, t0 + 5 * MINUTE);
+        e.apply(Action::Toggle, t0 + 20 * MINUTE);
+        assert!(e.away(t0 + 22 * MINUTE, t0 + 30 * MINUTE));
+        assert_eq!(e.snapshot(t0 + 40 * MINUTE).task_spent_ms, 6 * MINUTE);
+        e.apply(Action::Reset, t0 + 40 * MINUTE);
+        assert_eq!(spent(&e, a, t0 + 41 * MINUTE), 6 * MINUTE, "abandoned keeps its credit");
+    }
+
+    #[test]
+    fn done_task_keeps_timer_running() {
+        let mut e = engine();
+        let t0 = now();
+        let a = add_task(&e, "a", Bucket::Today, t0);
+        let b = add_task(&e, "b", Bucket::Today, t0);
+        e.apply(Action::Toggle, t0);
+        assert!(e.apply(Action::DoneTask, t0 + 8 * MINUTE).is_none());
+        assert_eq!((e.timer.run, e.timer.task_id), (RunState::Running, Some(b)));
+        assert!(e.task_row(a, t0).unwrap().done);
+        assert_eq!(spent(&e, a, t0 + 9 * MINUTE), 8 * MINUTE);
+        e.apply(Action::DoneTask, t0 + 9 * MINUTE);
+        let s = e.snapshot(t0 + 10 * MINUTE);
+        assert_eq!((s.run, s.task_id, s.task, s.today_open), (RunState::Running, None, None, 0), "free focus");
+    }
+
+    #[test]
+    fn next_task_moves_to_bottom() {
+        let mut e = engine();
+        let t0 = now();
+        add_task(&e, "a", Bucket::Today, t0);
+        let b = add_task(&e, "b", Bucket::Today, t0);
+        add_task(&e, "c", Bucket::Today, t0);
+        e.apply(Action::Toggle, t0);
+        e.apply(Action::NextTask, t0 + MINUTE);
+        assert_eq!(today_titles(&e, t0), ["b", "c", "a"]);
+        assert_eq!((e.timer.task_id, e.timer.run), (Some(b), RunState::Running));
+    }
+
+    #[test]
+    fn set_task_matches_today_or_adds_to_the_top() {
+        let mut e = engine();
+        let t0 = now();
+        add_task(&e, "a", Bucket::Today, t0);
+        let b = add_task(&e, "Tailor Resume", Bucket::Today, t0);
+        e.apply(Action::SetTask(Some("tailor resume".into())), t0);
+        assert_eq!(e.timer.task_id, Some(b));
+        e.apply(Action::SetTask(Some("Call recruiter 15m #job".into())), t0);
+        assert_eq!(today_titles(&e, t0), ["Call recruiter", "a", "Tailor Resume"]);
+        assert_eq!(e.snapshot(t0).task_estimate_ms, Some(15 * MINUTE));
+        e.apply(Action::SetTask(None), t0);
+        assert_eq!((e.timer.task_id, e.timer.task.as_deref()), (None, None));
+    }
+
+    #[test]
+    fn live_task_moved_away_is_credited_deleted_is_not() {
+        let mut e = engine();
+        let t0 = now();
+        let a = add_task(&e, "a", Bucket::Today, t0);
+        let b = add_task(&e, "b", Bucket::Today, t0);
+        let c = add_task(&e, "c", Bucket::Today, t0);
+        e.apply(Action::Toggle, t0);
+        e.db.move_task(a, Bucket::Week, None, t0 + 5 * MINUTE).unwrap();
+        e.reconcile_live(t0 + 5 * MINUTE);
+        assert_eq!(e.timer.task_id, Some(b));
+        e.db.delete_task(b, t0).unwrap();
+        e.reconcile_live(t0 + 9 * MINUTE);
+        assert_eq!(e.timer.task_id, Some(c));
+        e.db.update_task(c, &tasks::parse("c renamed #x").unwrap()).unwrap();
+        e.reconcile_live(t0 + 10 * MINUTE);
+        assert_eq!((e.timer.task.as_deref(), e.timer.project.as_deref()), (Some("c renamed"), Some("x")));
+        let f = e.tick(t0 + 25 * MINUTE).unwrap();
+        assert_eq!(f.task_ms, vec![(a, 5 * MINUTE), (c, 16 * MINUTE)]);
+    }
+
+    #[test]
+    fn task_state_survives_restart() {
+        let dir = std::env::temp_dir().join(format!("chronos-task-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("t.sqlite3");
+        let _ = std::fs::remove_file(&path);
+        let t0 = now();
+        let (a, b);
+        {
+            let mut e = Engine::load(Db::open(&path).unwrap());
+            a = add_task(&e, "a", Bucket::Today, t0);
+            b = add_task(&e, "b", Bucket::Today, t0);
+            e.apply(Action::Toggle, t0);
+            e.apply(Action::DoneTask, t0 + 10 * MINUTE);
+        }
+        let mut e = Engine::load(Db::open(&path).unwrap());
+        assert_eq!(e.timer.task_id, Some(b));
+        e.tick(t0 + 3 * 60 * MINUTE).expect("completed on relaunch");
+        assert_eq!((spent(&e, a, t0), spent(&e, b, t0)), (10 * MINUTE, 15 * MINUTE));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -98,6 +98,10 @@ pub struct Finished {
     pub adjust_ms: i64,
     pub task: Option<String>,
     pub project: Option<String>,
+    /// The planner task live at the end (the engine swaps in the one with the most time).
+    pub task_id: Option<i64>,
+    /// Focus time credited to each task during the block: (task_id, ms).
+    pub task_ms: Vec<(i64, i64)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -125,6 +129,12 @@ pub struct Timer {
     pub task: Option<String>,
     pub project: Option<String>,
     pub session_id: Option<i64>,
+    /// The planner task being worked on; None = free focus.
+    pub task_id: Option<i64>,
+    /// Focus time this block has already credited to tasks: (task_id, ms).
+    pub task_ms: Vec<(i64, i64)>,
+    /// `active()` at the moment the current task took over.
+    pub task_since_ms: i64,
 }
 
 impl Default for Timer {
@@ -151,6 +161,9 @@ impl Timer {
             task: None,
             project: None,
             session_id: None,
+            task_id: None,
+            task_ms: Vec::new(),
+            task_since_ms: 0,
         }
     }
 
@@ -172,6 +185,37 @@ impl Timer {
         }
     }
 
+    /// Makes `id` the live task. The outgoing task is credited with the focus
+    /// time since it took over; breaks and unstarted blocks credit nothing.
+    pub fn set_task(&mut self, id: Option<i64>, now: i64) {
+        if let Some((from, ms)) = self.stretch(now) {
+            add_credit(&mut self.task_ms, from, ms);
+        }
+        self.task_since_ms = self.active(now);
+        self.task_id = id;
+    }
+
+    /// Forgets the time this block gave a deleted task.
+    pub fn drop_task(&mut self, id: i64, now: i64) {
+        self.task_ms.retain(|(t, _)| *t != id);
+        if self.task_id == Some(id) {
+            self.task_since_ms = self.active(now);
+            self.task_id = None;
+        }
+    }
+
+    /// Focus time this block has given task `id` so far, as of `now`.
+    pub fn task_credit(&self, id: i64, now: i64) -> i64 {
+        let earlier: i64 = self.task_ms.iter().filter(|(t, _)| *t == id).map(|(_, ms)| ms).sum();
+        earlier + self.stretch(now).filter(|(t, _)| *t == id).map_or(0, |(_, ms)| ms)
+    }
+
+    /// The live task's uncredited focus time: (task_id, ms).
+    fn stretch(&self, now: i64) -> Option<(i64, i64)> {
+        let id = self.task_id.filter(|_| self.phase == Phase::Focus && self.is_started())?;
+        Some((id, (self.active(now) - self.task_since_ms).max(0)))
+    }
+
     /// Starts a fresh block or resumes a paused one. Returns true when a new
     /// block began (the caller should create its session row).
     pub fn start(&mut self, now: i64) -> bool {
@@ -188,6 +232,8 @@ impl Timer {
                 self.end_at = Some(now + self.remaining_ms);
                 self.run_since = Some(now);
                 self.active_ms = 0;
+                self.task_ms.clear();
+                self.task_since_ms = 0;
                 self.pause_count = 0;
                 self.away_count = 0;
                 self.adjust_ms = 0;
@@ -334,6 +380,7 @@ impl Timer {
     fn load_phase(&mut self, phase: Phase, d: &Durations) {
         let task = self.task.take();
         let project = self.project.take();
+        let task_id = self.task_id;
         let cycle = self.cycle;
         *self = Timer::new(d.for_phase(phase));
         self.phase = phase;
@@ -341,6 +388,7 @@ impl Timer {
         // The task describes what you're working on, so it survives breaks.
         self.task = task;
         self.project = project;
+        self.task_id = task_id;
     }
 
     fn advance(&mut self, completed: bool, d: &Durations) {
@@ -367,6 +415,10 @@ impl Timer {
     fn finish(&self, ended_at: i64, status: Option<EndStatus>) -> Option<Finished> {
         let started_at = self.started_at?;
         let actual_ms = self.active(ended_at);
+        let mut task_ms = self.task_ms.clone();
+        if let Some((id, ms)) = self.stretch(ended_at) {
+            add_credit(&mut task_ms, id, ms);
+        }
         let status = status.unwrap_or(if actual_ms < CANCEL_THRESHOLD_MS {
             EndStatus::Cancelled
         } else {
@@ -385,7 +437,19 @@ impl Timer {
             adjust_ms: self.adjust_ms,
             task: self.task.clone(),
             project: self.project.clone(),
+            task_id: self.task_id,
+            task_ms,
         })
+    }
+}
+
+fn add_credit(credits: &mut Vec<(i64, i64)>, id: i64, ms: i64) {
+    if ms <= 0 {
+        return;
+    }
+    match credits.iter_mut().find(|(t, _)| *t == id) {
+        Some((_, total)) => *total += ms,
+        None => credits.push((id, ms)),
     }
 }
 
@@ -612,11 +676,77 @@ mod tests {
     }
 
     #[test]
+    fn task_time_is_split_at_each_switch() {
+        let mut t = timer();
+        t.set_task(Some(1), T0);
+        t.start(T0);
+        t.set_task(Some(2), T0 + 10 * MINUTE);
+        assert_eq!(t.task_credit(1, T0 + 12 * MINUTE), 10 * MINUTE);
+        assert_eq!(t.task_credit(2, T0 + 12 * MINUTE), 2 * MINUTE);
+        let f = t.tick(T0 + 25 * MINUTE, &D).unwrap();
+        assert_eq!(f.task_ms, vec![(1, 10 * MINUTE), (2, 15 * MINUTE)]);
+        assert_eq!((f.task_id, t.task_id), (Some(2), Some(2)), "the task carries into the break");
+    }
+
+    #[test]
+    fn paused_and_away_time_is_not_credited() {
+        let mut t = timer();
+        t.set_task(Some(1), T0);
+        t.start(T0);
+        t.pause(T0 + 5 * MINUTE);
+        t.start(T0 + 30 * MINUTE);
+        t.pause_away(T0 + 35 * MINUTE, T0 + 50 * MINUTE).unwrap();
+        assert_eq!(t.task_credit(1, T0 + 60 * MINUTE), 10 * MINUTE);
+        t.set_task(Some(1), T0 + 60 * MINUTE);
+        t.set_task(Some(1), T0 + 61 * MINUTE);
+        assert_eq!(t.task_ms, vec![(1, 10 * MINUTE)], "switching to the same task adds nothing");
+    }
+
+    #[test]
+    fn breaks_and_idle_blocks_credit_nothing() {
+        let mut t = timer();
+        t.set_task(Some(1), T0);
+        t.switch_phase(Phase::ShortBreak, T0, &D);
+        t.start(T0);
+        t.set_task(Some(2), T0 + 4 * MINUTE);
+        assert!(t.task_ms.is_empty());
+        let f = t.tick(T0 + 5 * MINUTE, &D).unwrap();
+        assert!(f.task_ms.is_empty());
+        // The next focus block starts its credit from zero.
+        t.start(T0 + 6 * MINUTE);
+        assert_eq!(t.task_credit(2, T0 + 7 * MINUTE), MINUTE);
+    }
+
+    #[test]
+    fn dropping_a_deleted_task_forgets_its_time() {
+        let mut t = timer();
+        t.set_task(Some(1), T0);
+        t.start(T0);
+        t.set_task(Some(2), T0 + 5 * MINUTE);
+        t.drop_task(2, T0 + 8 * MINUTE);
+        t.drop_task(1, T0 + 8 * MINUTE);
+        assert_eq!(t.task_id, None);
+        let f = t.reset(T0 + 9 * MINUTE, &D).unwrap();
+        assert!(f.task_ms.is_empty());
+    }
+
+    #[test]
     fn state_round_trips_through_json() {
         let mut t = timer();
         t.start(T0);
         t.task = Some("x".into());
+        t.set_task(Some(3), T0 + MINUTE);
         let back: Timer = serde_json::from_str(&serde_json::to_string(&t).unwrap()).unwrap();
         assert_eq!(back, t);
+    }
+
+    #[test]
+    fn state_saved_before_tasks_still_loads() {
+        let mut v = serde_json::to_value(timer()).unwrap();
+        for k in ["taskId", "taskMs", "taskSinceMs"] {
+            v.as_object_mut().unwrap().remove(k);
+        }
+        let back: Timer = serde_json::from_value(v).unwrap();
+        assert_eq!((back.task_id, back.task_ms.len(), back.task_since_ms), (None, 0, 0));
     }
 }
