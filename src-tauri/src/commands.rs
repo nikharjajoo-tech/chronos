@@ -3,7 +3,8 @@
 
 use crate::analytics::PeriodStats;
 use crate::companion::{self, Quick};
-use crate::engine::{now_ms, Action, InsightsView, Snapshot, TodayStats};
+use crate::engine::{now_ms, Action, InsightsView, Snapshot, TaskPatch, TodayStats};
+use crate::tasks::{self, Bucket, ParsedTask, TaskRow};
 use crate::sysmac;
 use crate::settings::Settings;
 use crate::shell::{self, AppState, CLOCK};
@@ -27,6 +28,62 @@ pub fn act(app: AppHandle, action: Action) -> Snapshot {
         shell::emit_settings(&app);
     }
     snap
+}
+
+/// Open tasks, plus tasks done in the last `done_days` local days.
+#[tauri::command]
+pub fn tasks_list(state: State<AppState>, done_days: u32) -> Vec<TaskRow> {
+    engine(&state).tasks_list(done_days, now_ms())
+}
+
+/// For the preview chips while typing; writes nothing.
+#[tauri::command]
+pub fn task_parse(text: String) -> Option<ParsedTask> {
+    tasks::parse(&text)
+}
+
+#[tauri::command]
+pub fn task_add(app: AppHandle, state: State<AppState>, text: String, bucket: Bucket, top: bool) -> Result<TaskRow, String> {
+    let row = engine(&state).task_add(&text, bucket, top, now_ms())?;
+    shell::tasks_changed(&app);
+    Ok(row)
+}
+
+#[tauri::command]
+pub fn task_update(app: AppHandle, state: State<AppState>, id: i64, patch: TaskPatch) -> Result<TaskRow, String> {
+    let row = engine(&state).task_update(id, patch, now_ms())?;
+    shell::tasks_changed(&app);
+    Ok(row)
+}
+
+#[tauri::command]
+pub fn task_move(app: AppHandle, state: State<AppState>, id: i64, bucket: Bucket, before_id: Option<i64>) -> Result<(), String> {
+    engine(&state).task_move(id, bucket, before_id, now_ms())?;
+    shell::tasks_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn task_set_done(app: AppHandle, state: State<AppState>, id: i64, done: bool) -> Result<(), String> {
+    engine(&state).task_set_done(id, done, now_ms())?;
+    shell::tasks_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn task_delete(app: AppHandle, state: State<AppState>, id: i64) -> Result<(), String> {
+    engine(&state).task_delete(id, now_ms())?;
+    shell::tasks_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn task_undo_delete(app: AppHandle, state: State<AppState>) -> Option<TaskRow> {
+    let row = engine(&state).task_undo_delete(now_ms());
+    if row.is_some() {
+        shell::tasks_changed(&app);
+    }
+    row
 }
 
 #[tauri::command]

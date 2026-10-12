@@ -20,6 +20,8 @@ pub const EV_SNAPSHOT: &str = "chronos://snapshot";
 pub const EV_SETTINGS: &str = "chronos://settings";
 /// Stored stats changed outside a snapshot (rating, distraction category).
 pub const EV_STATS: &str = "chronos://stats";
+/// The task list changed; windows refetch it.
+pub const EV_TASKS: &str = "chronos://tasks";
 const TRAY: &str = "tray";
 
 pub struct AppState(pub Mutex<Engine>);
@@ -44,6 +46,8 @@ pub fn with_engine<R>(app: &AppHandle, f: impl FnOnce(&mut Engine) -> R) -> R {
 
 /// Apply an action from any source (UI, tray, menu) and tell every window.
 pub fn dispatch(app: &AppHandle, action: Action) -> Snapshot {
+    let touches_tasks =
+        matches!(action, Action::SetTask(_) | Action::StartTask(_) | Action::DoneTask | Action::NextTask);
     let (finished, snap, settings) = with_engine(app, |e| {
         let now = now_ms();
         let f = e.apply(action, now);
@@ -52,8 +56,19 @@ pub fn dispatch(app: &AppHandle, action: Action) -> Snapshot {
     if let Some(f) = &finished {
         companion::on_finished(app, &settings, f, &snap);
     }
+    if touches_tasks || finished.is_some() {
+        let _ = app.emit(EV_TASKS, ());
+    }
     broadcast(app, &snap);
     snap
+}
+
+/// After a task command: every window refetches the list, and the clock
+/// picks up a changed live task or Today count.
+pub fn tasks_changed(app: &AppHandle) {
+    let snap = with_engine(app, |e| e.snapshot(now_ms()));
+    let _ = app.emit(EV_TASKS, ());
+    broadcast(app, &snap);
 }
 
 /// Tell every window about a new state, and keep the tray and Do Not

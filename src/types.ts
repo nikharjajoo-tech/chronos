@@ -16,6 +16,13 @@ export interface Snapshot {
   longEvery: number;
   task: string | null;
   project: string | null;
+  /** The live planner task; null = free focus. */
+  taskId: number | null;
+  taskEstimateMs: number | null;
+  /** All focus time on the live task as of `now`; add Date.now() - now while focus runs. */
+  taskSpentMs: number;
+  /** Open tasks in Today. */
+  todayOpen: number;
   preset: string;
   sessionNumber: number;
   completedToday: number;
@@ -39,7 +46,42 @@ export type Action =
   | { type: "setRemaining"; value: number }
   | { type: "switchPhase"; value: Phase }
   | { type: "setTask"; value: string | null }
-  | { type: "preset"; value: string };
+  | { type: "preset"; value: string }
+  | { type: "startTask"; value: number }
+  | { type: "doneTask" }
+  | { type: "nextTask" };
+
+export type Bucket = "today" | "week" | "backlog";
+
+export interface TaskRow {
+  id: number;
+  title: string;
+  project: string | null;
+  bucket: Bucket;
+  position: number;
+  estimateMs: number | null;
+  done: boolean;
+  createdAt: number;
+  movedAt: number;
+  doneAt: number | null;
+  /** Focus time credited so far, including the running block. */
+  spentMs: number;
+  /** Open Today task carried over from an earlier day. */
+  leftover: boolean;
+}
+
+/** What `task_parse` made of typed text. */
+export interface ParsedTask {
+  title: string;
+  project: string | null;
+  estimateMs: number | null;
+}
+
+/** A task edit. `title` is re-parsed; `estimateMs: null` clears the estimate. */
+export interface TaskPatch {
+  title?: string;
+  estimateMs?: number | null;
+}
 
 export interface Settings {
   preset: string;

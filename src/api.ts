@@ -3,7 +3,7 @@
 // screenshotted without the desktop shell. Mock state is seeded from the URL,
 // e.g. ?view=clock&phase=focus&run=running&remaining=1122&task=Write
 
-import type { Action, AppInfo, EmailStatus, HelperStatus, InsightsView, PeriodStats, Quick, Settings, Snapshot, TodayStats } from "./types";
+import type { Action, AppInfo, Bucket, EmailStatus, HelperStatus, InsightsView, ParsedTask, PeriodStats, Quick, Settings, Snapshot, TaskPatch, TaskRow, TodayStats } from "./types";
 import { MINUTE } from "./format";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
@@ -13,6 +13,17 @@ export interface Backend {
   view(): "clock" | "panel" | "quick";
   snapshot(): Promise<Snapshot>;
   act(action: Action): Promise<Snapshot>;
+  /** Open tasks, plus tasks done in the last `doneDays` days. */
+  tasksList(doneDays: number): Promise<TaskRow[]>;
+  taskParse(text: string): Promise<ParsedTask | null>;
+  taskAdd(text: string, bucket: Bucket, top: boolean): Promise<TaskRow>;
+  taskUpdate(id: number, patch: TaskPatch): Promise<TaskRow>;
+  /** `beforeId: null` puts it at the end of the bucket. */
+  taskMove(id: number, bucket: Bucket, beforeId: number | null): Promise<void>;
+  taskSetDone(id: number, done: boolean): Promise<void>;
+  taskDelete(id: number): Promise<void>;
+  taskUndoDelete(): Promise<TaskRow | null>;
+  onTasks(cb: () => void): Unlisten;
   todayStats(): Promise<TodayStats>;
   periodStats(kind: "week" | "month", offset: number): Promise<PeriodStats>;
   recentProjects(): Promise<string[]>;
@@ -35,7 +46,7 @@ export interface Backend {
   getSettings(): Promise<Settings>;
   setSettings(s: Settings): Promise<{ settings: Settings; shortcutError: string | null }>;
   toggleClock(): Promise<void>;
-  openPanel(tab?: "today" | "history" | "insights" | "settings"): Promise<void>;
+  openPanel(tab?: "today" | "plan" | "history" | "insights" | "settings"): Promise<void>;
   showClockMenu(): Promise<void>;
   setClockScale(scale: number): Promise<void>;
   testSound(): Promise<void>;
@@ -75,6 +86,15 @@ function tauriBackend(): Backend {
     view: () => (label === "panel" || label === "quick" ? label : "clock"),
     snapshot: () => invoke("snapshot"),
     act: (action) => invoke("act", { action }),
+    tasksList: (doneDays) => invoke("tasks_list", { doneDays }),
+    taskParse: (text) => invoke("task_parse", { text }),
+    taskAdd: (text, bucket, top) => invoke("task_add", { text, bucket, top }),
+    taskUpdate: (id, patch) => invoke("task_update", { id, patch }),
+    taskMove: (id, bucket, beforeId) => invoke("task_move", { id, bucket, beforeId }),
+    taskSetDone: (id, done) => invoke("task_set_done", { id, done }),
+    taskDelete: (id) => invoke("task_delete", { id }),
+    taskUndoDelete: () => invoke("task_undo_delete"),
+    onTasks: (cb) => listen("chronos://tasks", cb),
     todayStats: () => invoke("today_stats"),
     periodStats: (kind, offset) => invoke("period_stats", { kind, offset }),
     recentProjects: () => invoke("recent_projects"),
@@ -134,16 +154,108 @@ function mockBackend(): Backend {
   let snap: Snapshot = {
     phase, run, durationMs: duration, remainingMs: remaining,
     endAt: run === "running" ? now() + remaining : null,
-    cycle: +(q.get("cycle") ?? 2), longEvery: 4, task: q.get("task"), project: q.get("project"), preset: "standard",
+    cycle: +(q.get("cycle") ?? 2), longEvery: 4, task: q.get("task"), project: q.get("project"),
+    taskId: null, taskEstimateMs: null, taskSpentMs: 0, todayOpen: 0, preset: "standard",
     sessionNumber: 3, completedToday: 2, focusMsToday: 52 * MINUTE, goalMs: 180 * MINUTE,
     distractionsToday: 3, awayMs: q.has("away") ? +q.get("away")! * MINUTE : null, companion: q.get("companion"),
     hidden: false, now: now(),
   };
   const subs = new Set<(s: Snapshot) => void>();
   const settingSubs = new Set<(s: Settings) => void>();
+  const taskSubs = new Set<() => void>();
   const remain = () => (snap.run === "running" && snap.endAt ? Math.max(0, snap.endAt - now()) : snap.remainingMs);
+
+  // Planner tasks, as in the mockup. ?tasks=0 starts with an empty list.
+  const t0 = now();
+  let nextId = 1;
+  let tasks: TaskRow[] = [];
+  const seed = (bucket: Bucket, title: string, project: string | null, est: number | null, spent = 0, extra: Partial<TaskRow> = {}) =>
+    tasks.push({
+      id: nextId, title, project, bucket, position: nextId++, estimateMs: est && est * MINUTE, done: false,
+      createdAt: t0, movedAt: t0, doneAt: null, spentMs: spent * MINUTE, leftover: false, ...extra,
+    });
+  if (q.get("tasks") !== "0") {
+    seed("today", "Prep slides for capstone demo", "course", 60, 38);
+    seed("today", "Tailor resume for AI PM role", "job-search", 45);
+    seed("today", "Chronos: tasks table migration", "chronos", 90);
+    seed("today", "Reply to recruiter emails", "job-search", 20, 0, { leftover: true, movedAt: t0 - 86_400_000 });
+    seed("today", "Morning walk", "life", 30, 32, { done: true, doneAt: t0 - 3 * 3_600_000 });
+    seed("week", "Mock interview practice", "job-search", 60);
+    seed("week", "Write LinkedIn post about Chronos", "brand", 40);
+    seed("week", "Weekly review", "life", null);
+    seed("week", "Apply to 3 roles", "job-search", 90);
+    seed("backlog", "Learn Rust error handling", "chronos", 120);
+    seed("backlog", "Read Deep Work, chapter 4", "reading", 35);
+    seed("backlog", "Clean up old notes", "life", null);
+  }
+  let deleted: TaskRow | null = null;
+  const open = (b: Bucket) => tasks.filter((t) => t.bucket === b && !t.done).sort((a, c) => a.position - c.position);
+  const find = (id: number) => tasks.find((t) => t.id === id);
+  const live = () => (snap.taskId == null ? undefined : find(snap.taskId));
+  const goLive = (t: TaskRow | undefined) => {
+    snap = { ...snap, taskId: t?.id ?? null, task: t?.title ?? null, project: t?.project ?? null, taskEstimateMs: t?.estimateMs ?? null, taskSpentMs: t?.spentMs ?? 0 };
+  };
+  const place = (b: Bucket, beforeId: number | null, skip?: number) => {
+    const col = tasks.filter((t) => t.bucket === b && t.id !== skip).sort((a, c) => a.position - c.position);
+    const i = beforeId == null ? -1 : col.findIndex((t) => t.id === beforeId);
+    if (i < 0) return (col[col.length - 1]?.position ?? 0) + 1;
+    return i === 0 ? col[0].position - 1 : (col[i - 1].position + col[i].position) / 2;
+  };
+  const tasksChanged = () => {
+    const l = live();
+    if (snap.taskId != null && (!l || l.done || l.bucket !== "today")) goLive(open("today")[0]);
+    else if (l) goLive(l);
+    snap = { ...snap, todayOpen: open("today").length };
+    taskSubs.forEach((cb) => cb());
+    emit();
+  };
+  // A port of tasks::parse (Rust) for previews: first #tag is the project,
+  // the longest trailing run of words that reads as a duration is the estimate.
+  const UNITS: Record<string, "h" | "m"> = { h: "h", hr: "h", hrs: "h", hour: "h", hours: "h", m: "m", min: "m", mins: "m", minute: "m", minutes: "m" };
+  const parseDuration = (s: string): number | null => {
+    let rest = s.toLowerCase();
+    let mins = 0;
+    let last: "h" | "m" | null = null;
+    while (rest) {
+      if (last === "m") return null;
+      const n = rest.match(/^[\d.,]+/);
+      const v = n ? Number(n[0].replace(",", ".")) : NaN;
+      if (!n || Number.isNaN(v)) return null;
+      rest = rest.slice(n[0].length).trimStart();
+      const word = rest.match(/^[a-z]*/)![0];
+      const unit: "h" | "m" | null = UNITS[word] ?? (word === "" && rest === "" && last === "h" ? "m" : null);
+      if (!unit || unit === last) return null;
+      mins += unit === "h" ? v * 60 : v;
+      last = unit;
+      rest = rest.slice(word.length).trimStart();
+    }
+    return last ? Math.round(mins) : null;
+  };
+  const parse = (text: string): ParsedTask | null => {
+    let project: string | null = null;
+    const words: string[] = [];
+    for (const w of text.split(/\s+/)) {
+      if (!w.startsWith("#")) {
+        if (w) words.push(w);
+        continue;
+      }
+      const tag = w.slice(1).replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 32).toLowerCase();
+      if (!project && tag) project = tag;
+    }
+    let k = words.findIndex((_, i) => parseDuration(words.slice(i).join(" ")) != null);
+    let mins = k >= 0 ? parseDuration(words.slice(k).join(" ")) : null;
+    if (mins == null || mins < 1 || mins > 480) {
+      k = words.length;
+      mins = null;
+    }
+    const title = words.slice(0, k).join(" ").slice(0, 120);
+    return title ? { title, project, estimateMs: mins && mins * MINUTE } : null;
+  };
+  if (q.has("live")) goLive(open("today")[0]);
+  snap = { ...snap, todayOpen: open("today").length };
+
   const emit = () => {
-    snap = { ...snap, now: now() };
+    snap = { ...snap, now: now(), taskSpentMs: live()?.spentMs ?? 0 };
     subs.forEach((cb) => cb(snap));
     return snap;
   };
@@ -230,9 +342,51 @@ function mockBackend(): Backend {
           snap = { ...snap, durationMs: snap.durationMs + (next - r), remainingMs: next, endAt: snap.run === "running" ? now() + next : null };
           break;
         }
-        case "setTask":
-          snap = { ...snap, task: a.value };
+        case "setTask": {
+          const p = a.value ? parse(a.value) : null;
+          if (!p) {
+            goLive(undefined);
+            break;
+          }
+          let t = open("today").find((x) => x.title.toLowerCase() === p.title.toLowerCase());
+          if (!t) {
+            seed("today", p.title, p.project, p.estimateMs && p.estimateMs / MINUTE, 0, { position: place("today", open("today")[0]?.id ?? null) });
+            t = tasks[tasks.length - 1];
+          }
+          goLive(t);
+          tasksChanged();
           break;
+        }
+        case "startTask": {
+          const t = find(a.value);
+          if (!t) break;
+          if (t.bucket !== "today" || t.done) {
+            t.position = place("today", open("today")[0]?.id ?? null, t.id);
+            t.bucket = "today";
+            t.done = false;
+            t.doneAt = null;
+          }
+          goLive(t);
+          snap = { ...snap, phase: "focus", run: "running", endAt: now() + (snap.phase === "focus" ? r : 25 * MINUTE) };
+          tasksChanged();
+          break;
+        }
+        case "doneTask": {
+          const t = live();
+          if (!t) break;
+          t.done = true;
+          t.doneAt = now();
+          tasksChanged();
+          break;
+        }
+        case "nextTask": {
+          const t = live();
+          if (!t) break;
+          t.position = place("today", null, t.id);
+          goLive(open("today").find((x) => x.id !== t.id) ?? t);
+          tasksChanged();
+          break;
+        }
         default:
           break;
       }
@@ -250,6 +404,68 @@ function mockBackend(): Backend {
     insights: async () => mockInsights(day.getTime(), q.has("empty")),
     respondSuggestion: async () => ({ ...mockInsights(day.getTime(), false), suggestion: null }),
     periodStats: async (kind, offset) => period(kind, offset),
+    tasksList: async (doneDays) => {
+      const since = doneDays === 0 ? Infinity : day.getTime() - (doneDays - 1) * 86_400_000;
+      return tasks.filter((t) => !t.done || (t.doneAt ?? 0) >= since).map((t) => ({ ...t }));
+    },
+    taskParse: async (text) => parse(text),
+    taskAdd: async (text, bucket, top) => {
+      const p = parse(text);
+      if (!p) throw "A task needs a title.";
+      const position = top ? place(bucket, open(bucket)[0]?.id ?? null) : place(bucket, null);
+      seed(bucket, p.title, p.project, p.estimateMs && p.estimateMs / MINUTE, 0, { position });
+      const t = tasks[tasks.length - 1];
+      tasksChanged();
+      return { ...t };
+    },
+    taskUpdate: async (id, patch) => {
+      const t = find(id);
+      if (!t) throw "That task no longer exists.";
+      if (patch.title !== undefined) {
+        const p = parse(patch.title);
+        if (!p) throw "A task needs a title.";
+        t.title = p.title;
+        t.project = p.project ?? t.project;
+        t.estimateMs = p.estimateMs ?? t.estimateMs;
+      }
+      if (patch.estimateMs !== undefined) t.estimateMs = patch.estimateMs;
+      tasksChanged();
+      return { ...t };
+    },
+    taskMove: async (id, bucket, beforeId) => {
+      const t = find(id);
+      if (!t) throw "That task no longer exists.";
+      t.position = place(bucket, beforeId === id ? null : beforeId, id);
+      if (t.bucket !== bucket) t.movedAt = now();
+      t.bucket = bucket;
+      t.leftover = t.leftover && bucket === "today";
+      tasksChanged();
+    },
+    taskSetDone: async (id, done) => {
+      const t = find(id);
+      if (!t) throw "That task no longer exists.";
+      t.done = done;
+      t.doneAt = done ? now() : null;
+      if (!done) t.position = place(t.bucket, open(t.bucket).find((x) => x.id !== id)?.id ?? null, id);
+      tasksChanged();
+    },
+    taskDelete: async (id) => {
+      deleted = find(id) ?? null;
+      tasks = tasks.filter((t) => t.id !== id);
+      tasksChanged();
+    },
+    taskUndoDelete: async () => {
+      const t = deleted;
+      deleted = null;
+      if (!t) return null;
+      tasks.push({ ...t, spentMs: 0 });
+      tasksChanged();
+      return { ...t, spentMs: 0 };
+    },
+    onTasks: (cb) => {
+      taskSubs.add(cb);
+      return () => taskSubs.delete(cb);
+    },
     recentProjects: async () => ["job-search", "portfolio"],
     logDistraction: async () => {},
     setDistractionCategory: async () => {},

@@ -6,8 +6,8 @@ use crate::insights::{self, Insight, Score, Suggestion};
 use crate::report::{self, Email, ReportData};
 use crate::db::{DayStats, Db, DistractionRow};
 use crate::settings::Settings;
-use crate::tasks::{self, Bucket, TaskRow};
-use crate::timer::{EndStatus, Finished, Phase, RunState, Timer};
+use crate::tasks::{self, Bucket, ParsedTask, TaskRow};
+use crate::timer::{EndStatus, Finished, Phase, RunState, Timer, MINUTE};
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime, TimeZone, Timelike};
 use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
@@ -40,6 +40,25 @@ pub enum Action {
     /// "Not now": the live task goes to the bottom of Today, the next one goes live.
     NextTask,
 }
+
+/// An edit to one task from the panel. `title` is re-parsed, so a `#tag` or
+/// an estimate typed at the end is picked up; parts it leaves out keep their
+/// value. `estimateMs: null` clears the estimate, leaving it out keeps it.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskPatch {
+    pub title: Option<String>,
+    #[serde(default, deserialize_with = "present")]
+    pub estimate_ms: Option<Option<i64>>,
+}
+
+/// Tells a field sent as `null` apart from one left out.
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<i64>>, D::Error> {
+    Option::<i64>::deserialize(d).map(Some)
+}
+
+const NO_TITLE: &str = "A task needs a title.";
+const NO_TASK: &str = "That task no longer exists.";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -125,6 +144,8 @@ pub struct Engine {
     pub hidden: bool,
     pub away_notice: Option<i64>,
     companion: CompanionMemory,
+    /// The last deleted task, for undo.
+    deleted: Option<TaskRow>,
 }
 
 /// What the companion remembers between sessions (in memory only).
@@ -193,7 +214,7 @@ impl Engine {
             .unwrap_or_else(|| Timer::new(settings.durations().focus_ms));
         timer.apply_durations(&settings.durations());
         let _ = db.close_orphans(timer.session_id);
-        Engine { timer, settings, db, hidden: false, away_notice: None, companion: CompanionMemory::default() }
+        Engine { timer, settings, db, hidden: false, away_notice: None, companion: CompanionMemory::default(), deleted: None }
     }
 
     pub fn today(&self, now: i64) -> DayStats {
@@ -543,6 +564,61 @@ impl Engine {
         rows
     }
 
+    pub fn task_add(&mut self, text: &str, bucket: Bucket, top: bool, now: i64) -> Result<TaskRow, String> {
+        let parsed = tasks::parse(text).ok_or(NO_TITLE)?;
+        let id = self.db.insert_task(&parsed, bucket, top, now).map_err(|e| e.to_string())?;
+        self.task_view(id, now).ok_or_else(|| NO_TASK.into())
+    }
+
+    pub fn task_update(&mut self, id: i64, patch: TaskPatch, now: i64) -> Result<TaskRow, String> {
+        let row = self.task_row(id, now).ok_or(NO_TASK)?;
+        let mut next = ParsedTask { title: row.title, project: row.project, estimate_ms: row.estimate_ms };
+        if let Some(text) = patch.title {
+            let typed = tasks::parse(&text).ok_or(NO_TITLE)?;
+            next.title = typed.title;
+            next.project = typed.project.or(next.project);
+            next.estimate_ms = typed.estimate_ms.or(next.estimate_ms);
+        }
+        if let Some(estimate) = patch.estimate_ms {
+            next.estimate_ms = estimate.map(|ms| ms.clamp(MINUTE, tasks::MAX_ESTIMATE_MS));
+        }
+        self.db.update_task(id, &next).map_err(|e| e.to_string())?;
+        self.reconcile_live(now);
+        self.task_view(id, now).ok_or_else(|| NO_TASK.into())
+    }
+
+    /// Drag and drop: into `bucket`, just before `before_id` (None = at the end).
+    pub fn task_move(&mut self, id: i64, bucket: Bucket, before_id: Option<i64>, now: i64) -> Result<(), String> {
+        self.task_row(id, now).ok_or(NO_TASK)?;
+        self.db.move_task(id, bucket, before_id, now).map_err(|e| e.to_string())?;
+        self.reconcile_live(now);
+        Ok(())
+    }
+
+    /// Ticking off the live task works like `DoneTask`; reopening puts a task
+    /// back at the top of its bucket.
+    pub fn task_set_done(&mut self, id: i64, done: bool, now: i64) -> Result<(), String> {
+        self.task_row(id, now).ok_or(NO_TASK)?;
+        self.db.set_task_done(id, done, now).map_err(|e| e.to_string())?;
+        self.reconcile_live(now);
+        Ok(())
+    }
+
+    pub fn task_delete(&mut self, id: i64, now: i64) -> Result<(), String> {
+        let row = self.db.delete_task(id, day_bounds(now).0).map_err(|e| e.to_string())?;
+        self.deleted = Some(row.ok_or(NO_TASK)?);
+        self.reconcile_live(now);
+        Ok(())
+    }
+
+    /// Puts the last deleted task back where it was. Its earlier focus time
+    /// is not restored.
+    pub fn task_undo_delete(&mut self, now: i64) -> Option<TaskRow> {
+        let row = self.deleted.take()?;
+        self.db.restore_task(&row).ok()?;
+        self.task_view(row.id, now)
+    }
+
     /// Call after any change to the task list. Keeps the live task in step:
     /// a deleted one loses this block's time, one that was ticked off or moved
     /// out of Today is credited, and either way the next Today task takes over.
@@ -565,6 +641,13 @@ impl Engine {
 
     fn task_row(&self, id: i64, now: i64) -> Option<TaskRow> {
         self.db.task(id, day_bounds(now).0).ok().flatten()
+    }
+
+    /// A task as the panel shows it: spent time includes the running block.
+    fn task_view(&self, id: i64, now: i64) -> Option<TaskRow> {
+        let mut row = self.task_row(id, now)?;
+        row.spent_ms += self.timer.task_credit(id, now);
+        Some(row)
     }
 
     fn top_today(&self, now: i64) -> Option<TaskRow> {
@@ -1098,6 +1181,45 @@ mod tests {
         assert_eq!((e.timer.task.as_deref(), e.timer.project.as_deref()), (Some("c renamed"), Some("x")));
         let f = e.tick(t0 + 25 * MINUTE).unwrap();
         assert_eq!(f.task_ms, vec![(a, 5 * MINUTE), (c, 16 * MINUTE)]);
+    }
+
+    #[test]
+    fn task_update_reparses_and_keeps_what_is_left_out() {
+        let mut e = engine();
+        let t0 = now();
+        let a = e.task_add("Prep slides 28m #course", Bucket::Week, false, t0).unwrap().id;
+        let r = e.task_update(a, TaskPatch { title: Some("Prep demo slides".into()), estimate_ms: None }, t0).unwrap();
+        assert_eq!((r.title.as_str(), r.project.as_deref(), r.estimate_ms), ("Prep demo slides", Some("course"), Some(28 * MINUTE)));
+        let r = e.task_update(a, TaskPatch { title: Some("Prep demo 1h #job".into()), estimate_ms: None }, t0).unwrap();
+        assert_eq!((r.project.as_deref(), r.estimate_ms), (Some("job"), Some(60 * MINUTE)));
+        let r = e.task_update(a, TaskPatch { title: None, estimate_ms: Some(None) }, t0).unwrap();
+        assert_eq!(r.estimate_ms, None);
+        assert!(e.task_update(a, TaskPatch { title: Some("45m".into()), estimate_ms: None }, t0).is_err());
+        assert!(e.task_add("  #tag ", Bucket::Today, false, t0).is_err());
+
+        let patch: TaskPatch = serde_json::from_str(r#"{"estimateMs":null}"#).unwrap();
+        assert_eq!(patch.estimate_ms, Some(None));
+        let patch: TaskPatch = serde_json::from_str(r#"{"title":"x"}"#).unwrap();
+        assert_eq!(patch.estimate_ms, None);
+    }
+
+    #[test]
+    fn deleting_the_live_task_can_be_undone() {
+        let mut e = engine();
+        let t0 = now();
+        let a = e.task_add("a", Bucket::Today, false, t0).unwrap().id;
+        let b = e.task_add("b", Bucket::Today, false, t0).unwrap().id;
+        e.apply(Action::Toggle, t0);
+        assert_eq!(e.tasks_list(1, t0 + 5 * MINUTE)[0].spent_ms, 5 * MINUTE, "the running block counts");
+        e.task_delete(a, t0 + 5 * MINUTE).unwrap();
+        assert_eq!(e.timer.task_id, Some(b));
+        assert_eq!(e.snapshot(t0 + 5 * MINUTE).today_open, 1);
+        let back = e.task_undo_delete(t0 + 6 * MINUTE).unwrap();
+        assert_eq!((back.id, back.spent_ms), (a, 0));
+        assert_eq!(today_titles(&e, t0), ["a", "b"]);
+        assert_eq!(e.timer.task_id, Some(b), "undo doesn't take over the clock");
+        assert!(e.task_undo_delete(t0).is_none(), "only once");
+        assert!(e.task_set_done(999, true, t0).is_err());
     }
 
     #[test]
