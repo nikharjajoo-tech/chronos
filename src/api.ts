@@ -155,7 +155,7 @@ function mockBackend(): Backend {
     phase, run, durationMs: duration, remainingMs: remaining,
     endAt: run === "running" ? now() + remaining : null,
     cycle: +(q.get("cycle") ?? 2), longEvery: 4, task: q.get("task"), project: q.get("project"),
-    taskId: null, taskEstimateMs: null, taskSpentMs: 0, todayOpen: 0, preset: "standard",
+    taskId: null, taskEstimateMs: null, taskSpentMs: 0, todayOpen: 0, nextTask: null, preset: "standard",
     sessionNumber: 3, completedToday: 2, focusMsToday: 52 * MINUTE, goalMs: 180 * MINUTE,
     distractionsToday: 3, awayMs: q.has("away") ? +q.get("away")! * MINUTE : null, companion: q.get("companion"),
     hidden: false, now: now(),
@@ -255,7 +255,8 @@ function mockBackend(): Backend {
   snap = { ...snap, todayOpen: open("today").length };
 
   const emit = () => {
-    snap = { ...snap, now: now(), taskSpentMs: live()?.spentMs ?? 0 };
+    const next = open("today").find((t) => t.id !== snap.taskId);
+    snap = { ...snap, now: now(), taskSpentMs: live()?.spentMs ?? 0, nextTask: next?.title ?? null };
     subs.forEach((cb) => cb(snap));
     return snap;
   };
@@ -329,6 +330,8 @@ function mockBackend(): Backend {
       const r = remain();
       switch (a.type) {
         case "toggle":
+          // A new focus block picks up the top Today task, as the engine does.
+          if (snap.run === "idle" && snap.phase === "focus" && snap.taskId == null) goLive(open("today")[0]);
           snap = snap.run === "running"
             ? { ...snap, run: "paused", remainingMs: r, endAt: null }
             : { ...snap, run: "running", endAt: now() + r };

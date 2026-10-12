@@ -14,6 +14,7 @@ import {
   PLATE,
   subLabel,
   TaskLine,
+  taskTooltip,
   useWheelAdjust,
 } from "./parts";
 
@@ -69,7 +70,7 @@ function Medium({ m }: { m: Model }) {
 /** Just the dial. Keys appear on hover (and whenever the timer is idle). */
 function Small({ m }: { m: Model }) {
   return (
-    <div className={casingClass(m)}>
+    <div className={casingClass(m)} title={taskTooltip(m)}>
       <DialUnit m={m} size={140} hoverRow="controls" />
       <div className="corner">
         <CapButtons m={m} soft />
@@ -84,7 +85,7 @@ function Pill({ m }: { m: Model }) {
   return (
     <div className={casingClass(m)}>
       <span className="lamp" title={m.snap.run} />
-      <div className="crt" onWheel={onWheel} title={PLATE[m.snap.phase]}>
+      <div className="crt" onWheel={onWheel} title={[PLATE[m.snap.phase], taskTooltip(m)].filter(Boolean).join(" · ")}>
         <Digits m={m} />
         <div className="bar">
           <i style={{ width: `${m.fraction * 100}%` }} />

@@ -228,5 +228,9 @@
     linear-gradient(135deg, transparent 45%, var(--m-muted) 46% 54%, transparent 55%),
     linear-gradient(135deg, transparent 70%, var(--m-muted) 71% 79%, transparent 80%);
 }
+.style-minimal .task-progress,
+.style-minimal .task-text.flash,
+.style-minimal .key.done { color: var(--glow); }
+.style-minimal .task-progress.over { color: #ff7a66; }
 .style-minimal .task-project { color: var(--glow); background: rgba(var(--glow-rgb), 0.14); }
 .style-minimal .task-text.away { color: var(--glow); }

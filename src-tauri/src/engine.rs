@@ -78,6 +78,8 @@ pub struct Snapshot {
     pub task_spent_ms: i64,
     /// Open tasks in Today.
     pub today_open: u32,
+    /// The Today task after the live one, for the clock's tooltip.
+    pub next_task: Option<String>,
     pub preset: String,
     pub session_number: u32,
     pub completed_today: u32,
@@ -413,6 +415,7 @@ impl Engine {
         let today = self.today(now);
         let t = &self.timer;
         let live = t.task_id.and_then(|id| self.db.task(id, day_bounds(now).0).ok().flatten());
+        let today_list = self.db.open_tasks(Bucket::Today, day_bounds(now).0).unwrap_or_default();
         Snapshot {
             phase: t.phase,
             run: t.run,
@@ -426,7 +429,8 @@ impl Engine {
             task_id: live.as_ref().map(|r| r.id),
             task_estimate_ms: live.as_ref().and_then(|r| r.estimate_ms),
             task_spent_ms: live.as_ref().map_or(0, |r| r.spent_ms + t.task_credit(r.id, now)),
-            today_open: self.db.open_count(Bucket::Today).unwrap_or(0),
+            today_open: today_list.len() as u32,
+            next_task: today_list.into_iter().find(|r| Some(r.id) != t.task_id).map(|r| r.title),
             preset: self.settings.preset.clone(),
             session_number: today.completed + u32::from(t.phase == Phase::Focus),
             completed_today: today.completed,
@@ -1142,8 +1146,10 @@ mod tests {
         let b = add_task(&e, "b", Bucket::Today, t0);
         add_task(&e, "c", Bucket::Today, t0);
         e.apply(Action::Toggle, t0);
+        assert_eq!(e.snapshot(t0).next_task.as_deref(), Some("b"));
         e.apply(Action::NextTask, t0 + MINUTE);
         assert_eq!(today_titles(&e, t0), ["b", "c", "a"]);
+        assert_eq!(e.snapshot(t0).next_task.as_deref(), Some("c"));
         assert_eq!((e.timer.task_id, e.timer.run), (Some(b), RunState::Running));
     }
 

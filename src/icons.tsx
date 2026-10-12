@@ -16,6 +16,7 @@ export const IconPause = ({ size = 18 }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden><rect x="6" y="5" width="4.2" height="14" rx="1.2" fill="currentColor" /><rect x="13.8" y="5" width="4.2" height="14" rx="1.2" fill="currentColor" /></svg>
 );
 export const IconReset = ({ size = 14 }: P) => svg(size, <><path d="M4 12a8 8 0 1 0 2.4-5.7" /><path d="M4 4v4.5h4.5" /></>);
+export const IconCheck = ({ size = 14 }: P) => svg(size, <path d="M5 12.5l4.5 4.5L19 7" />);
 export const IconSkip = ({ size = 14 }: P) => svg(size, <><path d="M5 5l8 7-8 7z" fill="currentColor" /><path d="M18 5v14" /></>);
 export const IconHide = ({ size = 12 }: P) => svg(size, <><path d="M3 12s3.5-6.5 9-6.5 9 6.5 9 6.5-3.5 6.5-9 6.5S3 12 3 12Z" /><path d="M4 20 20 4" /></>);
 export const IconMenu = ({ size = 12 }: P) => (

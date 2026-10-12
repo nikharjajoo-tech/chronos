@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { fmtClock, MINUTE, parseDuration } from "../format";
-import { IconHide, IconMenu, IconPause, IconPlay, IconReset, IconSkip } from "../icons";
+import { IconCheck, IconHide, IconMenu, IconPause, IconPlay, IconReset, IconSkip } from "../icons";
 import type { Action, Settings, Snapshot } from "../types";
 import { Dial } from "./Dial";
 import { Ring } from "./Ring";
@@ -21,6 +21,12 @@ export interface Model {
   editing: Editing;
   setEditing: (e: Editing) => void;
   hideKey: string;
+  /** Wall clock of this render; spent time on the live task runs on from `snap.now`. */
+  now: number;
+  /** Ticks off the live task (with a short "✓ done" flash on the task line). */
+  doneTask: () => void;
+  /** Shown on the task line for a few seconds after a task is ticked off. */
+  flash: string | null;
 }
 
 export const act = (a: Action) => void api.act(a);
@@ -30,6 +36,30 @@ export const PLATE: Record<Snapshot["phase"], string> = {
   short_break: "SHORT BREAK",
   long_break: "LONG BREAK",
 };
+
+/** Focus time on the live task right now. */
+export function taskSpent(m: Model): number {
+  const { snap } = m;
+  const running = snap.phase === "focus" && snap.run === "running";
+  return snap.taskSpentMs + (running ? Math.max(0, m.now - snap.now) : 0);
+}
+
+const mins = (ms: number) => Math.floor(ms / MINUTE);
+
+/** "Prep slides · #course · 38 of 60 min · Next: Tailor resume" */
+export function taskTooltip(m: Model): string | undefined {
+  const { snap } = m;
+  if (!snap.task) return undefined;
+  const spent = mins(taskSpent(m));
+  return [
+    snap.task,
+    snap.project && `#${snap.project}`,
+    snap.taskId != null && (snap.taskEstimateMs ? `${spent} of ${mins(snap.taskEstimateMs)} min` : `${spent} min`),
+    snap.nextTask && `Next: ${snap.nextTask}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export const casingClass = (m: Model) => `casing phase-${m.snap.phase} run-${m.snap.run}`;
 
@@ -97,11 +127,19 @@ export function MainKey({ m, round = false }: { m: Model; round?: boolean }) {
 export function Controls({ m, mini = false }: { m: Model; mini?: boolean }) {
   const isFocus = m.snap.phase === "focus";
   const side = mini ? "key mini" : "key small";
+  // With a live task in focus, the left key ticks it off; Reset stays on R and in the ⋯ menu.
+  const done = isFocus && m.snap.taskId != null;
   return (
     <div className={mini ? "controls mini" : "controls"}>
-      <button className={side} title="Reset (R) · ⇧R restarts" onClick={(e) => act({ type: e.shiftKey ? "restart" : "reset" })}>
-        <IconReset size={mini ? 11 : 14} />
-      </button>
+      {done ? (
+        <button className={`${side} done`} title="Done with task (D) · N for the next task" onClick={m.doneTask}>
+          <IconCheck size={mini ? 11 : 14} />
+        </button>
+      ) : (
+        <button className={side} title="Reset (R) · ⇧R restarts" onClick={(e) => act({ type: e.shiftKey ? "restart" : "reset" })}>
+          <IconReset size={mini ? 11 : 14} />
+        </button>
+      )}
       {mini ? (
         <button className="key mini primary" title={m.snap.run === "running" ? "Pause (Space)" : "Start (Space)"} onClick={() => act({ type: "toggle" })}>
           {m.snap.run === "running" ? <IconPause size={12} /> : <IconPlay size={12} />}
@@ -201,6 +239,14 @@ export function TaskLine({ m }: { m: Model }) {
     );
   }
 
+  if (m.flash) {
+    return (
+      <div className="task">
+        <span className="task-text flash">{m.flash}</span>
+      </div>
+    );
+  }
+
   if (snap.awayMs !== null && snap.run === "paused") {
     return (
       <div className="task">
@@ -221,14 +267,39 @@ export function TaskLine({ m }: { m: Model }) {
     );
   }
 
+  const isFocus = snap.phase === "focus";
+  const planned = snap.taskId != null;
+
+  // A live planner task: title on the left, progress on the right; the
+  // #project lives in the tooltip to leave room for the numbers.
+  if (isFocus && planned && snap.task) {
+    const spent = taskSpent(m);
+    const est = snap.taskEstimateMs;
+    const over = est != null && spent > est;
+    return (
+      <div className="task">
+        <button className="task-text has-progress" title={`${taskTooltip(m)} (click to change)`} onClick={() => m.setEditing("task")}>
+          <span className="task-title">
+            <span className="task-mark">▸</span>
+            {snap.task}
+          </span>
+          <span className={over ? "task-progress over" : "task-progress"}>
+            {est != null ? `${mins(spent)}/${mins(est)}m` : `${mins(spent)}m`}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   let text: string;
   let cls = "task-text";
-  if (snap.phase === "short_break") text = snap.run === "idle" ? "Nice work. Take five?" : "Breathe. Back soon.";
+  if (!isFocus && planned && snap.task) text = `Up next: ${snap.task}`;
+  else if (snap.phase === "short_break") text = snap.run === "idle" ? "Nice work. Take five?" : "Breathe. Back soon.";
   else if (snap.phase === "long_break") text = snap.run === "idle" ? "Set done. Take a proper break." : "Step away for a bit.";
   else if (snap.task) text = snap.task;
   else if (snap.project) text = "";
   else {
-    text = "+ what are you working on?";
+    text = snap.todayOpen > 0 ? "+ what are you working on?" : "Today’s list is clear · T to add";
     cls += " placeholder";
   }
 
@@ -236,12 +307,12 @@ export function TaskLine({ m }: { m: Model }) {
     <div className="task">
       <button
         className={cls}
-        title={snap.task ? `Focusing on: ${snap.task} (click to change)` : "Set an intention (T). Add #project to tag it."}
+        title={snap.task ? `${taskTooltip(m)} (click to change)` : "Set an intention (T). Add #project to tag it."}
         onClick={() => m.setEditing("task")}
       >
-        {snap.phase === "focus" && snap.task && <span className="task-mark">▸</span>}
+        {isFocus && snap.task && <span className="task-mark">▸</span>}
         {text}
-        {snap.phase === "focus" && snap.project && <span className="task-project">#{snap.project}</span>}
+        {isFocus && snap.project && <span className="task-project">#{snap.project}</span>}
       </button>
     </div>
   );

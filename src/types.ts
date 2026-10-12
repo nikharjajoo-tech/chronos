@@ -23,6 +23,8 @@ export interface Snapshot {
   taskSpentMs: number;
   /** Open tasks in Today. */
   todayOpen: number;
+  /** The Today task after the live one. */
+  nextTask: string | null;
   preset: string;
   sessionNumber: number;
   completedToday: number;

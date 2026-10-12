@@ -327,6 +327,26 @@ html.clock-window body {
   color: var(--cap);
   background: rgba(212, 103, 42, 0.12);
 }
+.task-text.has-progress {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.task-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.task-progress {
+  flex: none;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cap);
+}
+.task-progress.over { color: #b3261e; }
+.task-text.flash { color: var(--cap); font-style: normal; cursor: default; }
+.task-text.flash:hover { background: none; }
+.controls .key.done { color: var(--cap); }
 .task-text.companion { color: var(--ink); font-style: italic; }
 .task-text.away { color: #9a4a1b; font-style: normal; animation: lamp-pulse 2.4s ease-in-out infinite; }
 .task-input {

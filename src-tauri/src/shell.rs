@@ -30,6 +30,8 @@ pub struct AppState(pub Mutex<Engine>);
 pub struct TrayItems {
     toggle_clock: MenuItem<Wry>,
     toggle_run: MenuItem<Wry>,
+    done_task: MenuItem<Wry>,
+    next_task: MenuItem<Wry>,
 }
 
 /// Only position is remembered by the plugin; size follows the widget
@@ -330,11 +332,15 @@ fn tray_tooltip(snap: &Snapshot) -> String {
 pub fn build_tray(app: &AppHandle, shortcut: &str) -> tauri::Result<()> {
     let toggle_clock = MenuItem::with_id(app, "clock:toggle", format!("Hide Clock    {}", pretty_shortcut(shortcut)), true, None::<&str>)?;
     let toggle_run = MenuItem::with_id(app, "act:toggle", "Start Focus", true, None::<&str>)?;
+    let done_task = MenuItem::with_id(app, "act:done-task", "Done with Task", false, None::<&str>)?;
+    let next_task = MenuItem::with_id(app, "act:next-task", "Next Task", false, None::<&str>)?;
     let menu = MenuBuilder::new(app)
         .item(&toggle_clock)
         .separator()
         .item(&toggle_run)
         .item(&MenuItem::with_id(app, "act:skip", "Skip", true, None::<&str>)?)
+        .item(&done_task)
+        .item(&next_task)
         .item(&MenuItem::with_id(app, "act:add5", "Add 5 Minutes", true, None::<&str>)?)
         .item(&MenuItem::with_id(app, "distraction", "Log a Distraction", true, None::<&str>)?)
         .separator()
@@ -354,7 +360,7 @@ pub fn build_tray(app: &AppHandle, shortcut: &str) -> tauri::Result<()> {
         .menu(&menu)
         .show_menu_on_left_click(true)
         .build(app)?;
-    app.manage(TrayItems { toggle_clock, toggle_run });
+    app.manage(TrayItems { toggle_clock, toggle_run, done_task, next_task });
     Ok(())
 }
 
@@ -370,6 +376,8 @@ fn refresh_tray(app: &AppHandle, snap: &Snapshot) {
         let verb = if snap.hidden { "Show Clock" } else { "Hide Clock" };
         let _ = items.toggle_clock.set_text(format!("{verb}    {}", pretty_shortcut(&shortcut)));
         let _ = items.toggle_run.set_text(run_label(snap));
+        let _ = items.done_task.set_enabled(snap.task_id.is_some());
+        let _ = items.next_task.set_enabled(snap.task_id.is_some());
     }
     if let Some(tray) = app.tray_by_id(TRAY) {
         let _ = tray.set_tooltip(Some(tray_tooltip(snap)));
@@ -423,6 +431,9 @@ pub fn clock_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("act:skip", skip_label, true)?)
         .item(&item("act:reset", "Reset", started || snap.remaining_ms != snap.duration_ms)?)
         .separator()
+        .item(&item("act:done-task", "Done with Task", snap.task_id.is_some())?)
+        .item(&item("act:next-task", "Next Task", snap.task_id.is_some())?)
+        .separator()
         .item(&item("act:add5", "Add 5 Minutes", true)?)
         .item(&item("act:add10", "Add 10 Minutes", true)?)
         .item(&item("act:sub5", "Remove 5 Minutes", true)?)
@@ -453,6 +464,8 @@ pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         "act:add5" => Some(Action::Adjust(5 * MINUTE)),
         "act:add10" => Some(Action::Adjust(10 * MINUTE)),
         "act:sub5" => Some(Action::Adjust(-5 * MINUTE)),
+        "act:done-task" => Some(Action::DoneTask),
+        "act:next-task" => Some(Action::NextTask),
         _ => None,
     };
     if let Some(a) = action {
