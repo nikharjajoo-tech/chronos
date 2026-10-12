@@ -8,6 +8,7 @@ pub mod report;
 pub mod settings;
 pub mod shell;
 pub mod sysmac;
+pub mod tasks;
 pub mod timer;
 
 use engine::Engine;

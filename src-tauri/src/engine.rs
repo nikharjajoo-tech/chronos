@@ -6,6 +6,7 @@ use crate::insights::{self, Insight, Score, Suggestion};
 use crate::report::{self, Email, ReportData};
 use crate::db::{DayStats, Db, DistractionRow};
 use crate::settings::Settings;
+use crate::tasks;
 use crate::timer::{EndStatus, Finished, Phase, RunState, Timer};
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveTime, TimeZone, Timelike};
 use std::collections::BTreeSet;
@@ -165,25 +166,8 @@ fn days_between(first: NaiveDate, next: NaiveDate) -> Vec<(i64, i64)> {
 /// "Finish resume #job-search" → (Some("Finish resume"), Some("job-search")).
 /// The first #tag is the project; tags are lower-cased so #CV and #cv match.
 pub fn split_project(text: &str) -> (Option<String>, Option<String>) {
-    let mut project: Option<String> = None;
-    let mut words = Vec::new();
-    for w in text.split_whitespace() {
-        match w.strip_prefix('#') {
-            Some(tag) => {
-                let tag: String = tag
-                    .chars()
-                    .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
-                    .take(32)
-                    .collect::<String>()
-                    .to_lowercase();
-                if project.is_none() && !tag.is_empty() {
-                    project = Some(tag);
-                }
-            }
-            None => words.push(w),
-        }
-    }
-    let task: String = words.join(" ").chars().take(120).collect();
+    let (words, project) = tasks::split_tags(text);
+    let task: String = words.join(" ").chars().take(tasks::MAX_TITLE).collect();
     (Some(task).filter(|t| !t.is_empty()), project)
 }
 
