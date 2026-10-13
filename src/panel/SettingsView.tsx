@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { prettyShortcut, shortcutFromEvent } from "../format";
 import { useSettings } from "../hooks";
-import type { AppInfo, EmailStatus, HelperStatus, Settings, Widget } from "../types";
+import type { Access, AppInfo, ConnectKind, ConnectStatus, EmailStatus, HelperStatus, ListInfo, Settings, Widget } from "../types";
 
 const PRESETS = [
   { id: "standard", label: "Standard", sub: "25 / 5" },
@@ -32,6 +32,7 @@ const SECTIONS = [
   { id: "focus", label: "Focus" },
   { id: "look", label: "Look" },
   { id: "hide", label: "Hiding" },
+  { id: "connect", label: "Connect" },
   { id: "general", label: "General" },
 ] as const;
 type Section = (typeof SECTIONS)[number]["id"];
@@ -338,6 +339,8 @@ export function SettingsView() {
         </Group>
       )}
 
+      {section === "connect" && <Connect settings={settings} save={save} />}
+
       {section === "general" && (
         <>
           <Group title="Startup">
@@ -513,6 +516,157 @@ function AppList({ apps, running, onChange }: { apps: string[]; running: string[
         </div>
       </Row>
     </>
+  );
+}
+
+/** Reminders and Calendar, read through macOS (docs/INTEGRATIONS.md). */
+function Connect({ settings, save }: { settings: Settings; save: (p: Partial<Settings>, immediate?: boolean) => void }) {
+  const [status, setStatus] = useState<ConnectStatus | null>(null);
+  useEffect(() => {
+    // Coming back from System Settings re-checks the permission.
+    const refresh = () => api.connectStatus().then(setStatus);
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, []);
+  if (!status) return null;
+
+  const lists = settings.reminderLists;
+  const setList = (id: string, project: string | null) =>
+    save({ reminderLists: project === null ? lists.filter((l) => l.id !== id) : lists.some((l) => l.id === id) ? lists.map((l) => (l.id === id ? { id, project } : l)) : [...lists, { id, project }] }, true);
+  const cals = settings.calendars;
+
+  return (
+    <>
+      <Source
+        kind="reminders"
+        title="Reminders"
+        access={status.reminders}
+        onAccess={(reminders) => setStatus({ ...status, reminders })}
+        hint="Reminders in the lists you switch on become tasks. Ticking one off, here or in Reminders, ticks it off in both."
+        render={(all) =>
+          all.map((l) => {
+            const on = lists.find((x) => x.id === l.id);
+            return (
+              <div className="row" key={l.id}>
+                <span className="row-label">
+                  {l.title}
+                  <span className="list-src">{l.source}</span>
+                </span>
+                <div className="row-controls">
+                  {on && <ProjectInput value={on.project} onChange={(p) => setList(l.id, p)} />}
+                  <Switch label={`Bring in ${l.title}`} checked={!!on} onChange={(v) => setList(l.id, v ? defaultProject(l.title) : null)} />
+                </div>
+              </div>
+            );
+          })
+        }
+      />
+      <Source
+        kind="calendar"
+        title="Calendar"
+        access={status.calendar}
+        onAccess={(calendar) => setStatus({ ...status, calendar })}
+        hint="Meetings from the calendars you switch on show in Today and Plan. Any account in the Calendar app works, Google included."
+        render={(all) =>
+          all.map((c) => (
+            <div className="row" key={c.id}>
+              <span className="row-label">
+                {c.title}
+                <span className="list-src">{c.source}</span>
+              </span>
+              <Switch
+                label={`Show ${c.title}`}
+                checked={cals.includes(c.id)}
+                onChange={(v) => save({ calendars: v ? [...cals, c.id] : cals.filter((x) => x !== c.id) }, true)}
+              />
+            </div>
+          ))
+        }
+      />
+    </>
+  );
+}
+
+/** A list called "Reminders" gets no project; "Job search" gets #job-search. */
+const defaultProject = (title: string) =>
+  title.trim().toLowerCase() === "reminders" ? "" : title.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^\p{L}\p{N}_-]/gu, "").slice(0, 32);
+
+function Source({ kind, title, hint, access, onAccess, render }: { kind: ConnectKind; title: string; hint: string; access: Access; onAccess(a: Access): void; render(lists: ListInfo[]): ReactNode }) {
+  const [lists, setLists] = useState<ListInfo[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (access === "granted") api.connectLists(kind).then(setLists, (e) => setError(String(e)));
+  }, [access]);
+  const connect = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onAccess(await api.connectRequest(kind));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const noun = kind === "reminders" ? "lists" : "calendars";
+  return (
+    <Group title={title}>
+      <Row label="Access" hint={hint}>
+        {access === "granted" ? (
+          <span className="status-ok">✓ Connected</span>
+        ) : access === "not_determined" ? (
+          <button className="ghost" disabled={busy} onClick={connect}>
+            {busy ? "Waiting for macOS…" : "Connect"}
+          </button>
+        ) : access === "denied" ? (
+          <>
+            <span className="muted">Not allowed</span>
+            <button className="ghost" onClick={() => api.connectOpenPrivacy(kind)}>Open Privacy Settings</button>
+          </>
+        ) : (
+          <span className="muted">{access === "restricted" ? "Blocked on this Mac" : "Not available"}</span>
+        )}
+      </Row>
+      {access === "granted" && lists && lists.length === 0 && (
+        <Row label={`No ${noun} found`} muted>
+          <></>
+        </Row>
+      )}
+      {access === "granted" && lists && render(lists)}
+      {error && <p className="error">{error}</p>}
+    </Group>
+  );
+}
+
+/** "#project" for a list; saved when you leave the box or press Enter. */
+function ProjectInput({ value, onChange }: { value: string; onChange(v: string): void }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => draft !== value && onChange(draft);
+  return (
+    <span className="proj-input" title="Tasks from this list get this #project">
+      #
+      <input
+        value={draft}
+        placeholder="no project"
+        aria-label="Project for this list"
+        maxLength={32}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
+      />
+    </span>
+  );
+}
+
+function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange(v: boolean): void }) {
+  return (
+    <label className="switch">
+      <input type="checkbox" checked={checked} aria-label={label} onChange={(e) => onChange(e.target.checked)} />
+      <i aria-hidden />
+    </label>
   );
 }
 

@@ -3,7 +3,7 @@
 // screenshotted without the desktop shell. Mock state is seeded from the URL,
 // e.g. ?view=clock&phase=focus&run=running&remaining=1122&task=Write
 
-import type { Action, AppInfo, Bucket, MorningState, PlanMode, EmailStatus, HelperStatus, InsightsView, ParsedTask, PeriodStats, Quick, Settings, Snapshot, TaskPatch, TaskRow, TodayStats } from "./types";
+import type { Access, Action, AppInfo, Bucket, ConnectKind, ConnectStatus, ListInfo, MorningState, PlanMode, EmailStatus, HelperStatus, InsightsView, ParsedTask, PeriodStats, Quick, Settings, Snapshot, TaskPatch, TaskRow, TodayStats } from "./types";
 import { MINUTE } from "./format";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
@@ -42,6 +42,11 @@ export interface Backend {
   quickClose(): Promise<void>;
   helperStatus(): Promise<HelperStatus>;
   installDndShortcuts(): Promise<void>;
+  connectStatus(): Promise<ConnectStatus>;
+  /** Shows macOS's permission prompt the first time. */
+  connectRequest(kind: ConnectKind): Promise<Access>;
+  connectLists(kind: ConnectKind): Promise<ListInfo[]>;
+  connectOpenPrivacy(kind: ConnectKind): Promise<void>;
   emailStatus(): Promise<EmailStatus>;
   setEmailPassword(password: string): Promise<void>;
   sendTestEmail(): Promise<string>;
@@ -122,6 +127,10 @@ function tauriBackend(): Backend {
     quickClose: () => invoke("quick_close"),
     helperStatus: () => invoke("helper_status"),
     installDndShortcuts: () => invoke("install_dnd_shortcuts"),
+    connectStatus: () => invoke("connect_status"),
+    connectRequest: (kind) => invoke("connect_request", { kind }),
+    connectLists: (kind) => invoke("connect_lists", { kind }),
+    connectOpenPrivacy: (kind) => invoke("connect_open_privacy", { kind }),
     emailStatus: () => invoke("email_status"),
     setEmailPassword: (password) => invoke("set_email_password", { password }),
     sendTestEmail: () => invoke("send_test_email"),
@@ -164,7 +173,7 @@ function mockBackend(): Backend {
     awayMin: 5, autoHide: true, autoHideApps: ["CptHost", "screencaptureui", "obs"], dnd: false,
     menuBarTimer: "off", distractionShortcut: "Control+Alt+D", quickAddShortcut: "Control+Alt+T", morningPrompt: true, morningAfterHour: 5, reflection: true, notifications: true, companion: true,
     emailReport: q.has("email"), emailTo: q.has("email") ? "you@gmail.com" : "", emailFrom: q.has("email") ? "you@gmail.com" : "", emailDay: 0, emailHour: 9,
-    sound: true, volume: 0.6, dailyGoalMin: 180,
+    sound: true, volume: 0.6, dailyGoalMin: 180, reminderLists: [], calendars: [],
   };
   const phase = (q.get("phase") as Snapshot["phase"]) ?? "focus";
   const run = (q.get("run") as Snapshot["run"]) ?? "idle";
@@ -211,6 +220,11 @@ function mockBackend(): Backend {
   let planMode: PlanMode = q.has("board") ? "board" : "panel";
   // ?morning opens the morning sheet.
   let morningOpen = q.has("morning");
+  const asked = q.get("connect");
+  const connect: Record<ConnectKind, Access> = {
+    reminders: asked === "granted" || asked === "denied" ? asked : "not_determined",
+    calendar: asked === "granted" || asked === "denied" ? asked : "not_determined",
+  };
   const open = (b: Bucket) => tasks.filter((t) => t.bucket === b && !t.done).sort((a, c) => a.position - c.position);
   const find = (id: number) => tasks.find((t) => t.id === id);
   const live = () => (snap.taskId == null ? undefined : find(snap.taskId));
@@ -536,6 +550,14 @@ function mockBackend(): Backend {
     quickClose: async () => {},
     helperStatus: async () => ({ dndInstalled: false, running: [] }),
     installDndShortcuts: async () => {},
+    // ?connect=granted|denied previews the Connect section; default: not asked yet.
+    connectStatus: async () => ({ reminders: connect.reminders, calendar: connect.calendar }),
+    connectRequest: async (kind) => (connect[kind] = q.get("connect") === "denied" ? "denied" : "granted"),
+    connectLists: async (kind) =>
+      kind === "reminders"
+        ? [{ id: "r1", title: "Reminders", source: "iCloud" }, { id: "r2", title: "Job search", source: "iCloud" }, { id: "r3", title: "Groceries", source: "iCloud" }]
+        : [{ id: "c1", title: "Work", source: "Google" }, { id: "c2", title: "Personal", source: "iCloud" }, { id: "c3", title: "Holidays in India", source: "Subscribed" }],
+    connectOpenPrivacy: async () => {},
     emailStatus: async () => ({ hasPassword: q.has("pw"), status: { lastWeek: null, lastSentAt: null, lastAttemptAt: null, lastError: null }, nextSend: Date.now() + 4 * 86_400_000 }),
     setEmailPassword: async () => {},
     sendTestEmail: async () => "Sent to you@gmail.com.",

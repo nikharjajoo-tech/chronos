@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Shown in macOS's permission prompts. Chronos asks only when you press Connect in Settings. -->
+  <key>NSRemindersUsageDescription</key>
+  <string>Chronos brings the Reminders lists you pick into your plan, and ticks them off when you finish them.</string>
+  <key>NSRemindersFullAccessUsageDescription</key>
+  <string>Chronos brings the Reminders lists you pick into your plan, and ticks them off when you finish them.</string>
+  <key>NSCalendarsUsageDescription</key>
+  <string>Chronos shows today's meetings from the calendars you pick, so your plan fits around them.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Chronos shows today's meetings from the calendars you pick, so your plan fits around them.</string>
+</dict>
+</plist>

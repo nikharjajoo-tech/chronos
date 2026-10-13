@@ -132,7 +132,7 @@ html.panel-window body {
 @keyframes live { 50% { opacity: 0.35; } }
 
 /* ── settings ────────────────────────────────────────────────────────── */
-.set-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 2px; border-radius: 8px; background: var(--bg-2); margin-top: -4px; }
+.set-nav { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); padding: 2px; border-radius: 8px; background: var(--bg-2); margin-top: -4px; }
 .set-nav button {
   border: 0; background: none; padding: 5px 0; border-radius: 6px; cursor: pointer;
   font: 500 12px/16px inherit; font-family: inherit; color: var(--ink-2); white-space: nowrap;
@@ -233,8 +233,9 @@ input[type="range"] { accent-color: var(--accent); width: 150px; }
   cursor: pointer;
   position: relative;
 }
-.toggle input { position: absolute; opacity: 0; pointer-events: none; }
-.toggle i {
+.toggle input, .switch input { position: absolute; opacity: 0; pointer-events: none; }
+.switch { position: relative; display: inline-flex; flex: none; cursor: pointer; }
+.toggle i, .switch i {
   flex: none;
   width: 36px;
   height: 21px;
@@ -243,7 +244,7 @@ input[type="range"] { accent-color: var(--accent); width: 150px; }
   position: relative;
   transition: background 0.15s;
 }
-.toggle i::after {
+.toggle i::after, .switch i::after {
   content: "";
   position: absolute;
   top: 2px;
@@ -255,9 +256,13 @@ input[type="range"] { accent-color: var(--accent); width: 150px; }
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s;
 }
-.toggle input:checked + i { background: var(--accent); }
-.toggle input:checked + i::after { transform: translateX(15px); }
-.toggle input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggle input:checked + i, .switch input:checked + i { background: var(--accent); }
+.toggle input:checked + i::after, .switch input:checked + i::after { transform: translateX(15px); }
+.toggle input:focus-visible + i, .switch input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+.list-src { font-size: 11.5px; color: var(--ink-3); }
+.proj-input { display: inline-flex; align-items: center; height: 24px; padding: 0 2px 0 7px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink-3); font-size: 12.5px; }
+.proj-input input { width: 104px; border: 0; outline: none; background: none; padding: 0 4px 0 1px; font: inherit; color: var(--ink); }
+.proj-input:focus-within { border-color: var(--accent); }
 
 .shortcut { min-width: 92px; font-family: "SF Mono", Menlo, monospace; letter-spacing: 1px; }
 .shortcut.recording { border-color: var(--accent); color: var(--accent-text); animation: live 1.2s ease-in-out infinite; }
@@ -563,5 +568,8 @@ html[data-theme="glass"] .chips button.on { background: var(--card-solid); color
 html[data-theme="glass"] .segmented button.on,
 html[data-theme="glass"] .widget-picker button.on { background: var(--card-solid); box-shadow: inset 0 0 0 1.5px var(--accent); border-color: transparent; }
 html[data-theme="glass"] .segmented.small button.on { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14); }
-html[data-theme="glass"] .toggle i { background: rgba(120, 120, 128, 0.32); }
-html[data-theme="glass"] .toggle input:checked + i { background: var(--accent); }
+html[data-theme="glass"] .toggle i,
+html[data-theme="glass"] .switch i { background: rgba(120, 120, 128, 0.32); }
+html[data-theme="glass"] .toggle input:checked + i,
+html[data-theme="glass"] .switch input:checked + i { background: var(--accent); }
+html[data-theme="glass"] .proj-input { border-width: 0.5px; }

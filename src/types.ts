@@ -141,6 +141,10 @@ export interface Settings {
   sound: boolean;
   volume: number;
   dailyGoalMin: number;
+  /** Reminders lists brought in as tasks, each with the #project its tasks get. */
+  reminderLists: { id: string; project: string }[];
+  /** Calendars whose events show as meetings. */
+  calendars: string[];
 }
 
 export interface SessionRow {
@@ -311,3 +315,20 @@ export const PHASE_LABEL: Record<Phase, string> = {
   short_break: "Short Break",
   long_break: "Long Break",
 };
+
+/** Whether Chronos may read Reminders or Calendar (macOS privacy setting). */
+export type Access = "not_determined" | "denied" | "restricted" | "granted" | "unavailable";
+export type ConnectKind = "reminders" | "calendar";
+
+export interface ConnectStatus {
+  reminders: Access;
+  calendar: Access;
+}
+
+/** A Reminders list or a calendar. */
+export interface ListInfo {
+  id: string;
+  title: string;
+  /** The account: "iCloud", "Google", "On My Mac", … */
+  source: string;
+}

@@ -114,6 +114,19 @@ pub struct Settings {
     pub volume: f64,
 
     pub daily_goal_min: u32,
+
+    /// Reminders lists brought in as tasks (see docs/INTEGRATIONS.md).
+    pub reminder_lists: Vec<ReminderList>,
+    /// Calendars whose events show as meetings.
+    pub calendars: Vec<String>,
+}
+
+/// A ticked Reminders list and the #project its tasks get ("" = none).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReminderList {
+    pub id: String,
+    pub project: String,
 }
 
 impl Default for Settings {
@@ -157,6 +170,8 @@ impl Default for Settings {
             sound: true,
             volume: 0.6,
             daily_goal_min: 180,
+            reminder_lists: Vec::new(),
+            calendars: Vec::new(),
         }
     }
 }
@@ -217,6 +232,17 @@ impl Settings {
             }
         }
         self.auto_hide_apps = apps;
+        let mut lists: Vec<ReminderList> = Vec::new();
+        for l in std::mem::take(&mut self.reminder_lists) {
+            if !l.id.is_empty() && !lists.iter().any(|x| x.id == l.id) && lists.len() < 64 {
+                let project = crate::tasks::split_tags(&format!("#{}", l.project.trim().trim_start_matches('#').replace(' ', "-"))).1.unwrap_or_default();
+                lists.push(ReminderList { id: l.id, project });
+            }
+        }
+        self.reminder_lists = lists;
+        self.calendars.retain(|c| !c.is_empty());
+        self.calendars.dedup();
+        self.calendars.truncate(64);
         self.preset = match PRESETS.iter().find(|p| {
             p.focus_min == self.focus_min && p.short_min == self.short_min && p.long_min == self.long_min
         }) {
@@ -279,6 +305,16 @@ mod tests {
         assert_eq!(s2.auto_hide_apps, vec!["Keynote".to_string()]);
         assert_eq!(s2.menu_bar_timer, "off");
         assert_eq!(s2.away_min, 60);
+        let s3 = Settings {
+            reminder_lists: vec![
+                ReminderList { id: "a".into(), project: "#Job Search!".into() },
+                ReminderList { id: "a".into(), project: "dup".into() },
+                ReminderList { id: "".into(), project: "x".into() },
+            ],
+            ..Default::default()
+        }
+        .sanitized();
+        assert_eq!(s3.reminder_lists, vec![ReminderList { id: "a".into(), project: "job-search".into() }]);
         assert_eq!(s.focus_min, 1);
         assert_eq!(s.opacity, 1.0);
         assert_eq!(s.volume, 0.6);

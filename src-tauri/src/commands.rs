@@ -5,6 +5,7 @@ use crate::analytics::PeriodStats;
 use crate::companion::{self, Quick};
 use crate::engine::{now_ms, Action, InsightsView, MorningState, Snapshot, TaskPatch, TodayStats};
 use crate::tasks::{self, Bucket, ParsedTask, TaskRow};
+use crate::eventkit::{self, Kind};
 use crate::sysmac;
 use crate::settings::Settings;
 use crate::shell::{self, AppState, CLOCK};
@@ -239,6 +240,35 @@ pub fn preview_email(app: AppHandle, state: State<AppState>) -> Result<(), Strin
 pub fn open_app_passwords() {
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("/usr/bin/open").arg("https://myaccount.google.com/apppasswords").spawn();
+}
+
+#[derive(Serialize)]
+pub struct ConnectStatus {
+    reminders: eventkit::Access,
+    calendar: eventkit::Access,
+}
+
+/// Whether Chronos may read Reminders and Calendar. Never prompts.
+#[tauri::command]
+pub fn connect_status() -> ConnectStatus {
+    ConnectStatus { reminders: eventkit::access(Kind::Reminders), calendar: eventkit::access(Kind::Calendar) }
+}
+
+/// Shows macOS's permission prompt the first time; resolves when answered.
+#[tauri::command]
+pub async fn connect_request(kind: Kind) -> Result<eventkit::Access, String> {
+    tauri::async_runtime::spawn_blocking(move || eventkit::request_access(kind)).await.map_err(|e| e.to_string())?
+}
+
+/// Your Reminders lists, or your calendars.
+#[tauri::command]
+pub async fn connect_lists(kind: Kind) -> Result<Vec<eventkit::ListInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || eventkit::lists(kind)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn connect_open_privacy(kind: Kind) {
+    eventkit::open_privacy(kind);
 }
 
 #[tauri::command]

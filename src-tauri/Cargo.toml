@@ -27,6 +27,13 @@ serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
+# Reminders and Calendar (src/eventkit.rs). The same objc2 family Tauri uses.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSCalendar", "NSDate", "NSError", "NSObject", "NSPredicate", "NSString"] }
+objc2-event-kit = { version = "0.3", default-features = false, features = ["std", "block2", "EKCalendar", "EKCalendarItem", "EKEvent", "EKEventStore", "EKObject", "EKReminder", "EKSource", "EKTypes"] }
+
 [profile.release]
 codegen-units = 1
 lto = true

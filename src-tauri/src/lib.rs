@@ -3,6 +3,7 @@ pub mod commands;
 pub mod companion;
 pub mod db;
 pub mod engine;
+pub mod eventkit;
 pub mod insights;
 pub mod report;
 pub mod settings;
@@ -52,6 +53,10 @@ pub fn run() {
             commands::quick_close,
             commands::helper_status,
             commands::install_dnd_shortcuts,
+            commands::connect_status,
+            commands::connect_request,
+            commands::connect_lists,
+            commands::connect_open_privacy,
             commands::email_status,
             commands::set_email_password,
             commands::send_test_email,
