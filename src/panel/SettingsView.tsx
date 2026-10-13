@@ -108,8 +108,7 @@ export function SettingsView() {
 
       {section === "timer" && (
         <>
-          <section className="card">
-            <h3>Focus mode</h3>
+          <Group title="Focus mode">
             <div className="segmented">
               {PRESETS.map((p) => (
                 <button key={p.id} className={settings.preset === p.id ? "on" : ""} onClick={() => api.act({ type: "preset", value: p.id })}>
@@ -122,8 +121,7 @@ export function SettingsView() {
                 <small>{settings.preset === "custom" ? `${settings.focusMin} / ${settings.shortMin}` : "edit below"}</small>
               </button>
             </div>
-
-            <Row label="Focus">
+            <Row label="Focus" hint="New durations apply to the next session. To change the one running now, use +5 / −5 or click the digits on the clock.">
               <div className="chips">
                 {FOCUS_CHIPS.map((m) => (
                   <button key={m} className={settings.focusMin === m ? "on" : ""} onClick={() => save({ focusMin: m }, true)}>
@@ -140,15 +138,13 @@ export function SettingsView() {
               <Minutes value={settings.longMin} onChange={(v) => save({ longMin: v })} />
             </Row>
             <Row label="Long break after">
-              <Stepper value={settings.longEvery} min={1} max={12} onChange={(v) => save({ longEvery: v }, true)} suffix="focus sessions" />
+              <Stepper value={settings.longEvery} min={1} max={12} onChange={(v) => save({ longEvery: v }, true)} suffix="sessions" />
             </Row>
             <Toggle label="Start breaks automatically" checked={settings.autoStartBreaks} onChange={(v) => save({ autoStartBreaks: v }, true)} />
             <Toggle label="Start next focus automatically" checked={settings.autoStartFocus} onChange={(v) => save({ autoStartFocus: v }, true)} />
-            <p className="note">New durations apply to the next session. A session in progress keeps its time; use +5 / −5 or click the digits to change it.</p>
-          </section>
+          </Group>
 
-          <section className="card">
-            <h3>Daily goal</h3>
+          <Group title="Daily goal">
             <Row label="Focus time per day">
               <Stepper
                 value={settings.dailyGoalMin / 60}
@@ -159,37 +155,34 @@ export function SettingsView() {
                 suffix="hours"
               />
             </Row>
-          </section>
+          </Group>
 
-          <section className="card">
-            <h3>Sound</h3>
+          <Group title="Sound">
             <Toggle label="Chime when a session ends" checked={settings.sound} onChange={(v) => save({ sound: v }, true)} />
             <Row label="Volume">
               <input type="range" min={0} max={100} value={Math.round(settings.volume * 100)} disabled={!settings.sound} onChange={(e) => save({ volume: +e.target.value / 100 })} />
               <span className="value">{Math.round(settings.volume * 100)}%</span>
               <button className="ghost" onClick={() => api.testSound()}>Test</button>
             </Row>
-          </section>
+          </Group>
         </>
       )}
 
       {section === "focus" && (
         <>
-          <section className="card">
-            <h3>Focus helpers</h3>
-            <Row label="Pause when I step away">
+          <Group title="Focus helpers">
+            <Row
+              label="Pause when I step away"
+              hint="With no keyboard or mouse activity (or the lid closed), focus pauses from the moment you left, so time away never counts. Reading without touching anything counts as idle too."
+            >
               <select value={settings.awayMin} onChange={(e) => save({ awayMin: +e.target.value }, true)}>
                 {AWAY_OPTIONS.map((m) => (
                   <option key={m} value={m}>
-                    {m === 0 ? "Never" : `after ${m} min idle`}
+                    {m === 0 ? "Never" : `After ${m} min`}
                   </option>
                 ))}
               </select>
             </Row>
-            <p className="note">
-              With no keyboard or mouse activity (or the lid closed), the focus session pauses as of the moment you left, so time away
-              never counts as focus. Reading or watching without touching anything counts as idle too, so pick a longer time if needed.
-            </p>
             <Toggle
               label="Do Not Disturb during focus"
               hint="On while a focus session runs, off on breaks and pauses."
@@ -197,39 +190,37 @@ export function SettingsView() {
               onChange={(v) => save({ dnd: v }, true)}
             />
             {settings.dnd && helpers && !helpers.dndInstalled && (
-              <div className="row">
-                <label className="muted">Needs two shortcuts in the Shortcuts app</label>
-                <div className="row-controls">
-                  <button
-                    className="ghost"
-                    onClick={() => {
-                      setDndMsg("Click “Add Shortcut” in both windows that open…");
-                      api.installDndShortcuts().catch((e) => setDndMsg(String(e)));
-                    }}
-                  >
-                    Install shortcuts
-                  </button>
-                </div>
-              </div>
+              <Row label="Needs two Shortcuts" muted hint={dndMsg ?? "Chronos switches Focus through two shortcuts in the Shortcuts app."}>
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    setDndMsg("Click “Add Shortcut” in both windows that open.");
+                    api.installDndShortcuts().catch((e) => setDndMsg(String(e)));
+                  }}
+                >
+                  Install
+                </button>
+              </Row>
             )}
-            {settings.dnd && helpers?.dndInstalled && <p className="note status-ok">✓ “Chronos Focus On” and “Chronos Focus Off” are installed.</p>}
-            {settings.dnd && dndMsg && !helpers?.dndInstalled && <p className="note">{dndMsg}</p>}
-          </section>
+            {settings.dnd && helpers?.dndInstalled && (
+              <Row label="Shortcuts" muted>
+                <span className="status-ok">✓ Installed</span>
+              </Row>
+            )}
+          </Group>
 
-          <section className="card">
-            <h3>Planning</h3>
-            <Row label="Add a task from any app">
+          <Group title="Planning">
+            <Row label="Quick add a task" hint="Opens a small box over any app. Enter adds to Today; ⌘Enter adds it and starts focus.">
               <ShortcutRecorder value={settings.quickAddShortcut} onChange={(v) => save({ quickAddShortcut: v }, true)} />
             </Row>
-            <p className="note">Opens a small box over whatever you're doing. Enter adds to Today, ⌘Enter adds it and starts focus.</p>
             <Toggle
-              label="Ask me to plan my day each morning"
+              label="Morning planning"
               hint="The first time you're at your Mac each day, Plan opens so you can pick what goes in Today."
               checked={settings.morningPrompt}
               onChange={(v) => save({ morningPrompt: v }, true)}
             />
             {settings.morningPrompt && (
-              <Row label="Not before">
+              <Row label="Not before" muted>
                 <select value={settings.morningAfterHour} onChange={(e) => save({ morningAfterHour: +e.target.value }, true)}>
                   {Array.from({ length: 13 }, (_, h) => (
                     <option key={h} value={h}>
@@ -239,51 +230,46 @@ export function SettingsView() {
                 </select>
               </Row>
             )}
-          </section>
+          </Group>
 
-          <section className="card">
-            <h3>Distractions, reflection & nudges</h3>
-            <Row label="Log a distraction">
+          <Group title="Distractions & nudges">
+            <Row label="Log a distraction" hint="Works from any app and logs the moment at once. Picking a reason (keys 1–7) is optional.">
               <ShortcutRecorder value={settings.distractionShortcut} onChange={(v) => save({ distractionShortcut: v }, true)} />
             </Row>
-            <p className="note">Works from any app. Logs the moment instantly; picking a reason is optional (keys 1–7).</p>
             <Toggle
-              label="Quick reflection after focus sessions"
+              label="Reflection after each session"
               hint="“How productive was it?” with an optional goal check. Always skippable."
               checked={settings.reflection}
               onChange={(v) => save({ reflection: v }, true)}
             />
             <Toggle
-              label="Occasional companion messages"
+              label="Companion messages"
               hint="A rare line on the clock, e.g. after a long run without a break. At most one every 90 minutes."
               checked={settings.companion}
               onChange={(v) => save({ companion: v }, true)}
             />
             <Toggle
               label="Notifications"
-              hint="When a session ends or is paused while you're away."
+              hint="When a session ends, or is paused while you're away."
               checked={settings.notifications}
               onChange={(v) => save({ notifications: v }, true)}
             />
-          </section>
+          </Group>
         </>
       )}
 
       {section === "look" && (
         <>
-          <section className="card">
-            <h3>Appearance</h3>
-            <Row label="Panel and board">
+          <Group title="Panel">
+            <Row label="Theme" hint="For this window and the board. Light or dark follows your Mac.">
               <div className="chips">
                 <button className={settings.theme === "glass" ? "on" : ""} onClick={() => save({ theme: "glass" }, true)}>Glass</button>
                 <button className={settings.theme === "retro" ? "on" : ""} onClick={() => save({ theme: "retro" }, true)}>Retro</button>
               </div>
             </Row>
-            <p className="note">Light or dark follows your Mac. The clock has its own style below.</p>
-          </section>
+          </Group>
 
-          <section className="card">
-            <h3>Widget</h3>
+          <Group title="Clock">
             <div className="widget-picker">
               {WIDGETS.map((w) => (
                 <button key={w.id} className={settings.widget === w.id ? "on" : ""} onClick={() => save({ widget: w.id }, true)}>
@@ -300,17 +286,16 @@ export function SettingsView() {
                 <button className={settings.style === "glass" ? "on" : ""} onClick={() => save({ style: "glass" }, true)}>Glass</button>
               </div>
             </Row>
-            <Row label="Size">
+            <Row label="Size" hint="Also from the clock’s ⋯ menu → Widget Size, or drag its corner.">
               <input type="range" min={60} max={200} step={5} value={Math.round(settings.scale * 100)} onChange={(e) => save({ scale: +e.target.value / 100 })} />
               <span className="value">{Math.round(settings.scale * 100)}%</span>
             </Row>
-            <p className="note">Also from the clock’s ⋯ menu → Widget Size, or drag its corner.</p>
-          </section>
-
-          <section className="card">
-            <h3>Clock</h3>
+            <Row label="Opacity">
+              <input type="range" min={25} max={100} value={Math.round(settings.opacity * 100)} onChange={(e) => save({ opacity: +e.target.value / 100 })} />
+              <span className="value">{Math.round(settings.opacity * 100)}%</span>
+            </Row>
             <Toggle label="Always on top" checked={settings.alwaysOnTop} onChange={(v) => save({ alwaysOnTop: v }, true)} />
-            <Toggle label="Show on every desktop (Space)" checked={settings.allWorkspaces} onChange={(v) => save({ allWorkspaces: v }, true)} />
+            <Toggle label="Show on every desktop" checked={settings.allWorkspaces} onChange={(v) => save({ allWorkspaces: v }, true)} />
             <Row label="Countdown in menu bar">
               <div className="chips">
                 {(
@@ -326,60 +311,38 @@ export function SettingsView() {
                 ))}
               </div>
             </Row>
-            <Row label="Opacity">
-              <input
-                type="range"
-                min={25}
-                max={100}
-                value={Math.round(settings.opacity * 100)}
-                onChange={(e) => save({ opacity: +e.target.value / 100 })}
-              />
-              <span className="value">{Math.round(settings.opacity * 100)}%</span>
-            </Row>
-          </section>
+          </Group>
         </>
       )}
 
       {section === "hide" && (
-        <>
-          <section className="card">
-            <h3>Hide mode</h3>
-            <p className="note">
-              Hiding the clock never pauses the timer. Sessions keep running and keep being recorded. Bring the clock back from the menu bar
-              or with the shortcut.
-            </p>
-            <Row label="Hide / show shortcut">
-              <ShortcutRecorder value={settings.hideShortcut} onChange={(v) => save({ hideShortcut: v }, true)} />
-            </Row>
-            <Toggle
-              label="Hide automatically while sharing or recording"
-              hint="Hides when any app below is running, and comes back when it quits."
-              checked={settings.autoHide}
-              onChange={(v) => save({ autoHide: v }, true)}
-            />
-            {settings.autoHide && (
-              <AppList
-                apps={settings.autoHideApps}
-                running={helpers?.running ?? []}
-                onChange={(autoHideApps) => save({ autoHideApps }, true)}
-              />
-            )}
-            <Toggle
-              label="Invisible in screenshots & screen recordings"
-              hint="You still see the clock; captures don't. Some newer recorders ignore this, so use Hide when it matters."
-              checked={settings.captureProtected}
-              onChange={(v) => save({ captureProtected: v }, true)}
-            />
-          </section>
-        </>
+        <Group title="Hiding the clock">
+          <Row label="Hide / show" hint="Hiding never pauses the timer: sessions keep running and being recorded. Bring the clock back from the menu bar or with this shortcut.">
+            <ShortcutRecorder value={settings.hideShortcut} onChange={(v) => save({ hideShortcut: v }, true)} />
+          </Row>
+          <Toggle
+            label="Hide while sharing your screen"
+            hint="Hides while any app below is running and comes back when it quits."
+            checked={settings.autoHide}
+            onChange={(v) => save({ autoHide: v }, true)}
+          />
+          {settings.autoHide && (
+            <AppList apps={settings.autoHideApps} running={helpers?.running ?? []} onChange={(autoHideApps) => save({ autoHideApps }, true)} />
+          )}
+          <Toggle
+            label="Invisible in screenshots"
+            hint="You still see the clock; screenshots and recordings don't. Some newer recorders ignore this, so use Hide when it matters."
+            checked={settings.captureProtected}
+            onChange={(v) => save({ captureProtected: v }, true)}
+          />
+        </Group>
       )}
 
       {section === "general" && (
         <>
-          <section className="card">
-            <h3>Startup</h3>
+          <Group title="Startup">
             <Toggle
-              label="Open Chronos at login"
+              label="Open at login"
               hint="Starts quietly with your Mac and puts the clock back where you left it."
               checked={settings.launchAtLogin}
               onChange={(v) => save({ launchAtLogin: v }, true)}
@@ -390,25 +353,25 @@ export function SettingsView() {
               checked={settings.showInDock}
               onChange={(v) => save({ showInDock: v }, true)}
             />
-          </section>
+          </Group>
 
           <WeeklyEmail settings={settings} save={save} />
 
-          <section className="card">
-            <h3>Your data</h3>
-            <p className="note">
-              Everything stays on this computer in a local SQLite database. There's no account; the only thing that ever leaves your Mac is the weekly email, if you turn it on.
-            </p>
+          <Group title="Your data">
             {info && (
-              <Row label="Location">
+              <Row label="Stored on this Mac" hint="Everything stays in a local SQLite database. There's no account; only the weekly email, if you turn it on, leaves your Mac.">
                 <code className="path" title={info.dataDir}>
-                  {info.dataDir.length > 36 ? `…${info.dataDir.slice(-35)}` : info.dataDir}
+                  {info.dataDir.length > 30 ? `…${info.dataDir.slice(-29)}` : info.dataDir}
                 </code>
                 <button className="ghost" onClick={() => api.revealDataDir()}>Reveal</button>
               </Row>
             )}
-            {info && <p className="note muted">Chronos {info.version}</p>}
-          </section>
+            {info && (
+              <Row label="Version" muted>
+                <span className="value">{info.version}</span>
+              </Row>
+            )}
+          </Group>
         </>
       )}
     </div>
@@ -444,11 +407,10 @@ function WeeklyEmail({ settings, save }: { settings: Settings; save: (p: Partial
 
   const st = status?.status;
   return (
-    <section className="card">
-      <h3>Weekly email</h3>
+    <Group title="Weekly email">
       <Toggle
-        label="Email me a weekly summary"
-        hint="Score, totals vs the week before, focus per day, projects, insights and one suggestion. Never task names."
+        label="Weekly summary email"
+        hint="Score, totals against the week before, focus per day, projects, insights and one suggestion. Never task names. The only thing that leaves your Mac, and only while this is on."
         checked={settings.emailReport}
         onChange={(v) => save({ emailReport: v }, true)}
       />
@@ -460,12 +422,10 @@ function WeeklyEmail({ settings, save }: { settings: Settings; save: (p: Partial
           <Row label="Send from (Gmail)">
             <input className="text" type="email" placeholder="you@gmail.com" value={settings.emailFrom} onChange={(e) => save({ emailFrom: e.target.value })} />
           </Row>
-          <Row label="Gmail app password">
-            {status?.hasPassword && !pw ? (
-              <span className="status-ok">✓ Saved in Keychain</span>
-            ) : null}
+          <Row label="App password" hint="Gmail needs an app password, not your normal one (it requires 2-Step Verification). Name it “Chronos” and paste the 16 letters. It's kept only in the macOS Keychain.">
+            {status?.hasPassword && !pw ? <span className="status-ok">✓ In Keychain</span> : null}
             <input
-              className="text"
+              className="text short"
               type="password"
               placeholder={status?.hasPassword ? "Replace…" : "abcd efgh ijkl mnop"}
               value={pw}
@@ -476,12 +436,10 @@ function WeeklyEmail({ settings, save }: { settings: Settings; save: (p: Partial
               Save
             </button>
           </Row>
-          <p className="note">
-            Gmail needs an <b>app password</b> (not your normal one). It requires 2-Step Verification.{" "}
-            <button className="link" onClick={() => api.openAppPasswords()}>Create one at Google →</button> Name it “Chronos”, copy the
-            16 letters here. It's stored only in the macOS Keychain.
-          </p>
-          <Row label="When">
+          <Row label="No app password yet?" muted>
+            <button className="link" onClick={() => api.openAppPasswords()}>Create one at Google →</button>
+          </Row>
+          <Row label="When" hint="If your Mac is off at send time, it goes out at the next chance; a failed send retries every 30 minutes.">
             <select value={settings.emailDay} onChange={(e) => save({ emailDay: +e.target.value }, true)}>
               {DAYS.map((d, i) => (
                 <option key={d} value={i}>{d}s</option>
@@ -508,18 +466,14 @@ function WeeklyEmail({ settings, save }: { settings: Settings; save: (p: Partial
                 Preview
               </button>
               <button className="ghost" disabled={busy || !status?.hasPassword || !settings.emailTo} onClick={() => run(() => api.sendTestEmail())}>
-                {busy ? "Sending…" : "Send test now"}
+                {busy ? "Sending…" : "Send test"}
               </button>
             </div>
           </div>
           {msg && <p className={msg.ok ? "note status-ok" : "error"}>{msg.text}</p>}
-          <p className="note muted">
-            This is the only thing in Chronos that sends data off your Mac, and only while this is on. If your Mac is off at send time,
-            it goes out at the next chance; a failed send retries every 30 minutes.
-          </p>
         </>
       )}
-    </section>
+    </Group>
   );
 }
 
@@ -546,27 +500,54 @@ function AppList({ apps, running, onChange }: { apps: string[]; running: string[
           );
         })}
       </div>
-      <div className="row">
-        <label className="muted">Add an app</label>
-        <div className="row-controls app-add">
+      <Row
+        label="Add an app"
+        muted
+        hint="Browser calls (Google Meet in Chrome) can't be detected; use the hide shortcut or “Invisible in screenshots” for those."
+      >
+        <div className="app-add">
           <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="e.g. Keynote, Microsoft Teams" />
           <button className="ghost" onClick={add} disabled={!draft.trim()}>
             Add
           </button>
         </div>
-      </div>
-      <p className="note">
-        Browser-based calls (Google Meet in Chrome) can't be detected, so use the hide shortcut or turn on “Invisible in screenshots &
-        recordings” for those.
-      </p>
+      </Row>
     </>
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+/** A titled group of one-line rows. */
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="set-group">
+      <h3>{title}</h3>
+      <div className="set-list">{children}</div>
+    </section>
+  );
+}
+
+/** ⓘ after a label: the details show on hover or keyboard focus. */
+function Info({ text }: { text: string }) {
+  return (
+    <button type="button" className="info" aria-label={text} onClick={(e) => e.preventDefault()}>
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+        <circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M7 6.2v3.6M7 4.2v.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </svg>
+      <span className="info-tip" aria-hidden>
+        {text}
+      </span>
+    </button>
+  );
+}
+
+function Row({ label, hint, muted, children }: { label: string; hint?: string; muted?: boolean; children: ReactNode }) {
   return (
     <div className="row">
-      <label>{label}</label>
+      <span className={`row-label${muted ? " muted" : ""}`}>
+        <label>{label}</label>
+        {hint && <Info text={hint} />}
+      </span>
       <div className="row-controls">{children}</div>
     </div>
   );
@@ -575,9 +556,9 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="toggle">
-      <span>
+      <span className="row-label">
         {label}
-        {hint && <small>{hint}</small>}
+        {hint && <Info text={hint} />}
       </span>
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <i aria-hidden />
