@@ -4,7 +4,7 @@
 
 # Chronos
 
-### A little retro-futuristic clock that lives on your desktop, helps you focus, gets out of the way when you need it to, and quietly learns how you work.
+### A little retro-futuristic clock that lives on your desktop, plans your day with you, helps you focus, gets out of the way when you need it to, and quietly learns how you work.
 
 ![macOS](https://img.shields.io/badge/macOS-11%2B-1d1d1f?style=flat-square&logo=apple)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?style=flat-square&logo=tauri&logoColor=white)
@@ -14,7 +14,7 @@
 ![App size](https://img.shields.io/badge/app-~5%20MB-d4672a?style=flat-square)
 ![Your data](https://img.shields.io/badge/your%20data-stays%20on%20your%20Mac-3f8a5a?style=flat-square)
 
-[**Features**](#-what-it-does) · [**Widgets**](#%EF%B8%8F-pick-your-clock) · [**Insights**](#-is-my-focus-getting-better) · [**Shortcuts**](#%EF%B8%8F-keyboard-shortcuts) · [**Install**](#-install) · [**How it's built**](#%EF%B8%8F-how-its-built)
+[**Features**](#-what-it-does) · [**Planner**](#%EF%B8%8F-plan-your-day) · [**Widgets**](#%EF%B8%8F-pick-your-clock) · [**Insights**](#-is-my-focus-getting-better) · [**Shortcuts**](#%EF%B8%8F-keyboard-shortcuts) · [**Install**](#-install) · [**How it's built**](#%EF%B8%8F-how-its-built)
 
 </div>
 
@@ -28,6 +28,7 @@ Most Pomodoro apps are either a bare countdown or yet another dashboard fighting
 
 - 🕰️ **It's an object, not an app.** A small desk clock with a glowing 7-segment display, a ticking dial and real buttons. It sits on top of your work without shouting.
 - 🫥 **It disappears when you need it to.** Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>H</kbd>, or let it hide by itself when you start screen sharing. The timer keeps running.
+- 🗂️ **It knows what you're working on.** Plan Today, This week and a Backlog, and the top task goes live on the clock, with time spent against your estimate.
 - 📈 **It answers one question:** *"Am I actually getting better at focusing?"* It gives you a weekly score, honest stats, and insights drawn from **your** data.
 - 🔒 **Private by default.** No account, no cloud, no tracking. Everything lives in one file on your Mac.
 
@@ -77,13 +78,32 @@ Most Pomodoro apps are either a bare countdown or yet another dashboard fighting
 
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🗂️ A planner that feeds the clock
+- **Backlog · This week · Today · Done**, in the panel or widened into a **board** you drag cards across
+- The **top Today task goes live** when focus starts; press <kbd>D</kbd> when it's done and the next one moves in, without stopping the timer
+- **Estimates vs actual**: cards and the clock show `38/60m`, and Today shows how your plan compares with your daily goal
+- A **morning prompt** once a day: pick what goes in Today
+
+</td>
+<td width="50%" valign="top">
+
+### ⚡ Capture from anywhere
+- <kbd>⌃</kbd><kbd>⌥</kbd><kbd>T</kbd> opens a small box over any app
+- Type naturally: `Prep slides 28min #job-search` becomes a title, a project and an estimate
+- <kbd>Enter</kbd> adds it to Today, <kbd>Tab</kbd> picks another list, <kbd>⌘</kbd><kbd>Enter</kbd> adds it **and starts focus**
+
+</td>
+</tr>
 </table>
 
 ---
 
 ## 🎛️ Pick your clock
 
-Four sizes, two styles. Switch any time from the clock's <kbd>⋯</kbd> menu or in Settings, and drag the corner to resize.
+Four sizes, three styles. Switch any time from the clock's <kbd>⋯</kbd> menu or in Settings, and drag the corner to resize.
 
 <img src="docs/images/widgets.jpg" alt="Large, Medium, Small and Pill widgets in Retro and Minimal styles" width="100%">
 
@@ -94,13 +114,29 @@ Four sizes, two styles. Switch any time from the clock's <kbd>⋯</kbd> menu or 
 | ◼️ | **Small** | Just the dial (keys appear on hover) | A tidy corner companion |
 | 💊 | **Pill** | Time, a progress line, one key | Maximum focus, minimum distraction |
 
-> 🎨 **Retro** is warm putty plastic with an amber CRT glow. **Minimal** is flat and quiet, and follows your Mac's light or dark mode. Each phase has its own glow: **amber** for focus, **teal** for short breaks, **violet** for long breaks.
+> 🎨 **Retro** is warm putty plastic with an amber CRT glow. **Minimal** is flat and quiet, and follows your Mac's light or dark mode. **Glass** is Apple-style frosted grey with orange only where it matters, also following light or dark. Each phase has its own colour: **amber/orange** for focus, **teal** for short breaks, **violet** for long breaks.
+
+---
+
+## 🗂️ Plan your day
+
+<img src="docs/images/planner.jpg" alt="The Plan tab widened into a board: Backlog, This week, Today and Done, with a project filter and Today's load" width="100%">
+
+The **Plan** tab holds four lists: **Backlog**, **This week**, **Today** and **Done**.
+
+- **Panel or board.** In the panel you see one list at a time. Press **Board view** (or <kbd>⌘</kbd><kbd>E</kbd>) and the same window widens into four columns you can drag cards across, with a project filter and *Today's load*. Switch to another tab and it shrinks back.
+- **Type it the way you think.** `Email campaign 2hr 15min #work` → *Email campaign*, `#work`, 2h 15m. A number inside the title stays in the title (`Read 3 chapters`), and a task with no estimate is never counted as zero.
+- **One live task.** When focus starts, the top Today task goes live: the clock shows it with `spent/estimate`, and the time you focus is credited to it. Pauses and away time never count. Switch tasks mid-block and the time is split between them.
+- **Finish, then flow.** <kbd>D</kbd> on the clock (or the tick on a card) marks it done with a `✓ Prep slides · 38m` flash, and the next task goes live. <kbd>N</kbd> sends the live task to the bottom of Today. <kbd>S</kbd> still means *skip to break*.
+- **Honest plans.** Today compares *focus already done + what's left of each estimate* with your daily goal: *"3h 49m planned · goal 3h · 49m over."*
+- **Good morning.** The first time you're at your Mac each day (after 5 AM, not while screen sharing), Plan opens with a sheet: yesterday's leftovers ticked, This week and the backlog on offer. **Start the day** makes Today exactly what you picked; the rest goes back to This week.
+- **Two looks.** The panel, board and pop-ups use **Glass** by default (frosted, neutral, orange only as an accent) or **Retro** (cream and orange), chosen in *Settings → Appearance*.
 
 ---
 
 ## 📊 Is my focus getting better?
 
-Chronos has four tabs: **Today**, **History**, **Insights** and **Settings**.
+Chronos has five tabs: **Today**, **Plan**, **History**, **Insights** and **Settings**.
 
 <img src="docs/images/panels.jpg" alt="Today, History and Insights tabs" width="100%">
 
@@ -188,7 +224,9 @@ Both popups close themselves, never need an answer, and stay hidden while you're
 
 ```mermaid
 flowchart LR
-    A["▶ Start focus<br/>#project + task"] --> B{"Working…"}
+    P["🗂️ Plan Today<br/>(or ⌃⌥T from any app)"] --> A
+    A["▶ Start focus<br/>top Today task goes live"] --> B{"Working…"}
+    B -- "D: task done" --> K["✓ Credited<br/>next task goes live"] --> B
     B -- "⌃⌥D" --> C["Distraction logged<br/>pick a reason 1–7"] --> B
     B -- "idle 5 min / lid closed" --> D["Auto-pause<br/>back-dated to when you left"] --> B
     B -- "screen share starts" --> E["Clock hides itself<br/>timer keeps going"] --> B
@@ -207,6 +245,7 @@ flowchart LR
 |---|---|
 | <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>H</kbd> | Hide or show the clock (the timer keeps running) |
 | <kbd>⌃</kbd> <kbd>⌥</kbd> <kbd>D</kbd> | Log a distraction |
+| <kbd>⌃</kbd> <kbd>⌥</kbd> <kbd>T</kbd> | Add a task (<kbd>⌘</kbd><kbd>Enter</kbd> adds it and starts focus) |
 
 | With the clock focused | |
 |---|---|
@@ -215,11 +254,22 @@ flowchart LR
 | <kbd>S</kbd> | Skip to the next phase |
 | <kbd>↑</kbd> <kbd>↓</kbd> | ±1 minute (add <kbd>⇧</kbd> for ±5) |
 | <kbd>Enter</kbd> | Type an exact time: `25`, `18:42`, `1h 15m` |
-| <kbd>T</kbd> | Set what you're working on (add `#project`) |
+| <kbd>T</kbd> | Set what you're working on (add `#project`); it matches a Today task or adds one at the top |
+| <kbd>D</kbd> | Done with the live task; the next one goes live |
+| <kbd>N</kbd> | Next task: the live one moves to the bottom of Today |
 | <kbd>⌘</kbd> <kbd>,</kbd> | Open Settings |
 | Right-click or <kbd>⋯</kbd> | Menu: modes, widget size, style, always on top, stats |
 
-Both global shortcuts can be changed in Settings.
+| In the Plan tab | |
+|---|---|
+| <kbd>⌘</kbd> <kbd>E</kbd> | Switch between the panel and the board |
+| <kbd>Enter</kbd> / <kbd>Tab</kbd> / <kbd>Esc</kbd> | In the add box: add, change list, clear |
+| <kbd>↑</kbd> <kbd>↓</kbd> | Move between tasks |
+| <kbd>⌥</kbd> <kbd>↑</kbd> <kbd>↓</kbd> | Move a task up or down its list |
+| <kbd>⌥</kbd> <kbd>←</kbd> <kbd>→</kbd> | Move a task to the neighbouring list |
+| <kbd>Space</kbd> / <kbd>Enter</kbd> / <kbd>⌫</kbd> | Done / edit / delete (with Undo) |
+
+All three global shortcuts can be changed in Settings.
 
 ---
 
@@ -263,6 +313,8 @@ npm run test:rust   # Rust tests: timer, database, analytics, insights, email…
 The browser preview takes URL parameters for any state, which makes design work quick:
 `http://localhost:1420/?view=clock&widget=pill&style=minimal&phase=focus&run=running&remaining=1122`
 
+Planner states work the same way: `?view=panel&board&live&run=running#plan` (the board with a live task), `?view=panel&morning#plan` (the morning sheet), `?view=quick&quick=add` (the ⌃⌥T box), `?theme=retro`, and `?tasks=0` for empty lists.
+
 </details>
 
 ---
@@ -275,7 +327,8 @@ The browser preview takes URL parameters for any state, which makes design work 
 | ☁️ **Network access** | **None**, except the weekly email if you turn it on (sent through your own Gmail) |
 | 👤 **Accounts and telemetry** | None |
 | 🔑 **Passwords** | Only the optional Gmail app password, kept in the macOS Keychain |
-| 🙈 **Screen-sharing safety** | Auto-hide, a hide hotkey, and capture protection |
+| 🙈 **Screen-sharing safety** | Auto-hide, a hide hotkey, and capture protection. The morning prompt waits until sharing stops. |
+| 🗂️ **Your tasks** | Stored in the same local file. Task names never go into the weekly email. |
 
 ---
 
@@ -284,16 +337,17 @@ The browser preview takes URL parameters for any state, which makes design work 
 ```mermaid
 flowchart TB
     subgraph Rust["🦀 Rust core (always running, ~0% CPU idle)"]
-        T["Timer engine<br/>absolute end times"] --- DB[("SQLite")]
-        W["Watchdog<br/>completion · away · auto-hide"] --- T
+        T["Timer engine<br/>absolute end times · live task"] --- DB[("SQLite")]
+        TK["Planner<br/>tasks · parsing · time credit"] --- DB
+        W["Watchdog<br/>completion · away · auto-hide · morning"] --- T
         AN["Analytics & insights<br/>score · suggestions"] --- DB
         SH["Desktop shell<br/>tray · hotkeys · windows · DND"] --- T
         EM["Weekly email<br/>Gmail + Keychain"] --- AN
     end
     subgraph UI["⚛️ React UI (only what you see)"]
-        CL["Floating clock<br/>4 widgets × 2 styles"]
-        PA["Panel<br/>Today · History · Insights · Settings"]
-        QP["Quick popups"]
+        CL["Floating clock<br/>4 widgets × 3 styles"]
+        PA["Panel ⇄ board<br/>Today · Plan · History · Insights · Settings"]
+        QP["Quick popups<br/>distraction · reflection · ⌃⌥T add task"]
     end
     Rust <-- "commands & live events" --> UI
 ```
@@ -314,12 +368,13 @@ flowchart TB
 chronos/
 ├── src/                      # React UI
 │   ├── clock/                # floating clock: layouts, dial, 7-segment digits
-│   ├── panel/                # Today · History · Insights · Settings
-│   ├── quick/                # distraction & reflection popups
+│   ├── panel/                # Today · Plan (panel + board) · History · Insights · Settings
+│   ├── quick/                # distraction & reflection popups, ⌃⌥T add-task box
 │   └── api.ts                # the one doorway to Rust (plus a browser mock)
 ├── src-tauri/src/            # Rust core
 │   ├── timer.rs              # pure Pomodoro state machine (no clocks, no I/O)
-│   ├── engine.rs             # timer + settings + database glue
+│   ├── engine.rs             # timer + settings + database glue, live task, morning prompt
+│   ├── tasks.rs              # planner types and the task parser
 │   ├── db.rs                 # SQLite schema & migrations
 │   ├── analytics.rs          # weekly / monthly aggregates, streaks
 │   ├── insights.rs           # score, insights, suggestions, companion lines
@@ -327,23 +382,29 @@ chronos/
 │   ├── report.rs             # weekly email: render, schedule, send
 │   ├── sysmac.rs             # macOS idle time, process list, Shortcuts
 │   └── shell.rs              # windows, tray, menus, global hotkeys
-└── docs/DESIGN.md            # the design notes behind all of this
+├── docs/DESIGN.md            # the design notes behind all of this
+└── docs/PLANNER-PHASE1.md    # the planner's spec
 ```
 
 </details>
 
-**Tested:** 61 Rust tests (timer maths, sleep and crash recovery, away pauses, analytics, score, insights, suggestions, email rendering) and 19 UI tests.
+**Tested:** 94 Rust tests (timer maths, sleep and crash recovery, away pauses, analytics, score, insights, suggestions, email rendering, task parsing, live-task time credit, the morning prompt) and 36 UI tests (formatting, drag-and-drop maths, planned load).
 
 ---
 
 ## 🗺️ Roadmap
 
-- [x] Floating clock: 4 widgets × 2 styles, hide mode, always on top
+- [x] Floating clock: 4 widgets × 3 styles, hide mode, always on top
 - [x] Drift-proof timer with crash recovery
 - [x] Away detection, auto-hide while sharing, Do Not Disturb
 - [x] Distractions, reflections, projects
 - [x] History, weekly score, insights, suggestions
 - [x] Weekly email
+- [x] Planner: Today / This week / Backlog, board view, live task, estimates vs actual, ⌃⌥T quick add, morning prompt
+- [x] Glass theme for the panel, board, pop-ups and clock
+- [ ] Planner phase 2: estimate-accuracy insights, time per task in History, logging time by hand
+- [ ] Planner phase 3: due dates, recurring tasks, reminders
+- [ ] Planner phase 4: an MCP server so Claude can read and add your tasks
 - [ ] Ambient focus sounds (brown noise, rain, a soft tick)
 - [ ] Save your own focus modes
 - [ ] CSV export and automatic backups
