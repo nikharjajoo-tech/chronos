@@ -26,8 +26,34 @@ const KNOWN_APPS: Record<string, string> = {
 };
 const AWAY_OPTIONS = [0, 3, 5, 10, 15, 20];
 
+/** One section shows at a time; the last one picked comes back next time. */
+const SECTIONS = [
+  { id: "timer", label: "Timer" },
+  { id: "focus", label: "Focus" },
+  { id: "look", label: "Look" },
+  { id: "hide", label: "Hiding" },
+  { id: "general", label: "General" },
+] as const;
+type Section = (typeof SECTIONS)[number]["id"];
+const SECTION_KEY = "chronos.settingsSection";
+const savedSection = (): Section => {
+  try {
+    const v = localStorage.getItem(SECTION_KEY);
+    return SECTIONS.some((x) => x.id === v) ? (v as Section) : "timer";
+  } catch {
+    return "timer";
+  }
+};
+
 export function SettingsView() {
   const [settings, setLocal] = useSettings();
+  const [section, setSection] = useState<Section>(savedSection);
+  const pick = (id: Section) => {
+    setSection(id);
+    try {
+      localStorage.setItem(SECTION_KEY, id);
+    } catch {}
+  };
   const [shortcutError, setShortcutError] = useState<string | null>(null);
   const [info, setInfo] = useState<AppInfo | null>(null);
   const pending = useRef<number>(0);
@@ -66,292 +92,325 @@ export function SettingsView() {
 
   return (
     <div className="settings">
-      <section className="card">
-        <h3>Focus mode</h3>
-        <div className="segmented">
-          {PRESETS.map((p) => (
-            <button key={p.id} className={settings.preset === p.id ? "on" : ""} onClick={() => api.act({ type: "preset", value: p.id })}>
-              {p.label}
-              <small>{p.sub}</small>
-            </button>
-          ))}
-          <button className={settings.preset === "custom" ? "on" : ""} disabled>
-            Custom
-            <small>{settings.preset === "custom" ? `${settings.focusMin} / ${settings.shortMin}` : "edit below"}</small>
-          </button>
+      <header className="hist-head">
+        <div className="td-title">
+          <h1>Settings</h1>
         </div>
+      </header>
+      <nav className="set-nav" aria-label="Settings sections">
+        {SECTIONS.map((x) => (
+          <button key={x.id} className={section === x.id ? "on" : ""} aria-current={section === x.id} onClick={() => pick(x.id)}>
+            {x.label}
+          </button>
+        ))}
+      </nav>
+      {shortcutError && <p className="error set-error">{shortcutError}</p>}
 
-        <Row label="Focus">
-          <div className="chips">
-            {FOCUS_CHIPS.map((m) => (
-              <button key={m} className={settings.focusMin === m ? "on" : ""} onClick={() => save({ focusMin: m }, true)}>
-                {m}
-              </button>
-            ))}
-          </div>
-          <Minutes value={settings.focusMin} onChange={(v) => save({ focusMin: v })} />
-        </Row>
-        <Row label="Short break">
-          <Minutes value={settings.shortMin} onChange={(v) => save({ shortMin: v })} />
-        </Row>
-        <Row label="Long break">
-          <Minutes value={settings.longMin} onChange={(v) => save({ longMin: v })} />
-        </Row>
-        <Row label="Long break after">
-          <Stepper value={settings.longEvery} min={1} max={12} onChange={(v) => save({ longEvery: v }, true)} suffix="focus sessions" />
-        </Row>
-        <Toggle label="Start breaks automatically" checked={settings.autoStartBreaks} onChange={(v) => save({ autoStartBreaks: v }, true)} />
-        <Toggle label="Start next focus automatically" checked={settings.autoStartFocus} onChange={(v) => save({ autoStartFocus: v }, true)} />
-        <p className="note">New durations apply to the next session. A session in progress keeps its time; use +5 / −5 or click the digits to change it.</p>
-      </section>
-
-      <section className="card">
-        <h3>Focus helpers</h3>
-        <Row label="Pause when I step away">
-          <select value={settings.awayMin} onChange={(e) => save({ awayMin: +e.target.value }, true)}>
-            {AWAY_OPTIONS.map((m) => (
-              <option key={m} value={m}>
-                {m === 0 ? "Never" : `after ${m} min idle`}
-              </option>
-            ))}
-          </select>
-        </Row>
-        <p className="note">
-          With no keyboard or mouse activity (or the lid closed), the focus session pauses as of the moment you left, so time away
-          never counts as focus. Reading or watching without touching anything counts as idle too, so pick a longer time if needed.
-        </p>
-        <Toggle
-          label="Do Not Disturb during focus"
-          hint="On while a focus session runs, off on breaks and pauses."
-          checked={settings.dnd}
-          onChange={(v) => save({ dnd: v }, true)}
-        />
-        {settings.dnd && helpers && !helpers.dndInstalled && (
-          <div className="row">
-            <label className="muted">Needs two shortcuts in the Shortcuts app</label>
-            <div className="row-controls">
-              <button
-                className="ghost"
-                onClick={() => {
-                  setDndMsg("Click “Add Shortcut” in both windows that open…");
-                  api.installDndShortcuts().catch((e) => setDndMsg(String(e)));
-                }}
-              >
-                Install shortcuts
+      {section === "timer" && (
+        <>
+          <section className="card">
+            <h3>Focus mode</h3>
+            <div className="segmented">
+              {PRESETS.map((p) => (
+                <button key={p.id} className={settings.preset === p.id ? "on" : ""} onClick={() => api.act({ type: "preset", value: p.id })}>
+                  {p.label}
+                  <small>{p.sub}</small>
+                </button>
+              ))}
+              <button className={settings.preset === "custom" ? "on" : ""} disabled>
+                Custom
+                <small>{settings.preset === "custom" ? `${settings.focusMin} / ${settings.shortMin}` : "edit below"}</small>
               </button>
             </div>
-          </div>
-        )}
-        {settings.dnd && helpers?.dndInstalled && <p className="note status-ok">✓ “Chronos Focus On” and “Chronos Focus Off” are installed.</p>}
-        {settings.dnd && dndMsg && !helpers?.dndInstalled && <p className="note">{dndMsg}</p>}
-      </section>
 
-      <section className="card">
-        <h3>Planning</h3>
-        <Row label="Add a task from any app">
-          <ShortcutRecorder value={settings.quickAddShortcut} onChange={(v) => save({ quickAddShortcut: v }, true)} />
-        </Row>
-        <p className="note">Opens a small box over whatever you're doing. Enter adds to Today, ⌘Enter adds it and starts focus.</p>
-        <Toggle
-          label="Ask me to plan my day each morning"
-          hint="The first time you're at your Mac each day, Plan opens so you can pick what goes in Today."
-          checked={settings.morningPrompt}
-          onChange={(v) => save({ morningPrompt: v }, true)}
-        />
-        {settings.morningPrompt && (
-          <Row label="Not before">
-            <select value={settings.morningAfterHour} onChange={(e) => save({ morningAfterHour: +e.target.value }, true)}>
-              {Array.from({ length: 13 }, (_, h) => (
-                <option key={h} value={h}>
-                  {h === 0 ? "Midnight" : h === 12 ? "12 PM" : `${h} AM`}
-                </option>
+            <Row label="Focus">
+              <div className="chips">
+                {FOCUS_CHIPS.map((m) => (
+                  <button key={m} className={settings.focusMin === m ? "on" : ""} onClick={() => save({ focusMin: m }, true)}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+              <Minutes value={settings.focusMin} onChange={(v) => save({ focusMin: v })} />
+            </Row>
+            <Row label="Short break">
+              <Minutes value={settings.shortMin} onChange={(v) => save({ shortMin: v })} />
+            </Row>
+            <Row label="Long break">
+              <Minutes value={settings.longMin} onChange={(v) => save({ longMin: v })} />
+            </Row>
+            <Row label="Long break after">
+              <Stepper value={settings.longEvery} min={1} max={12} onChange={(v) => save({ longEvery: v }, true)} suffix="focus sessions" />
+            </Row>
+            <Toggle label="Start breaks automatically" checked={settings.autoStartBreaks} onChange={(v) => save({ autoStartBreaks: v }, true)} />
+            <Toggle label="Start next focus automatically" checked={settings.autoStartFocus} onChange={(v) => save({ autoStartFocus: v }, true)} />
+            <p className="note">New durations apply to the next session. A session in progress keeps its time; use +5 / −5 or click the digits to change it.</p>
+          </section>
+
+          <section className="card">
+            <h3>Daily goal</h3>
+            <Row label="Focus time per day">
+              <Stepper
+                value={settings.dailyGoalMin / 60}
+                min={0}
+                max={12}
+                step={0.5}
+                onChange={(v) => save({ dailyGoalMin: Math.round(v * 60) }, true)}
+                suffix="hours"
+              />
+            </Row>
+          </section>
+
+          <section className="card">
+            <h3>Sound</h3>
+            <Toggle label="Chime when a session ends" checked={settings.sound} onChange={(v) => save({ sound: v }, true)} />
+            <Row label="Volume">
+              <input type="range" min={0} max={100} value={Math.round(settings.volume * 100)} disabled={!settings.sound} onChange={(e) => save({ volume: +e.target.value / 100 })} />
+              <span className="value">{Math.round(settings.volume * 100)}%</span>
+              <button className="ghost" onClick={() => api.testSound()}>Test</button>
+            </Row>
+          </section>
+        </>
+      )}
+
+      {section === "focus" && (
+        <>
+          <section className="card">
+            <h3>Focus helpers</h3>
+            <Row label="Pause when I step away">
+              <select value={settings.awayMin} onChange={(e) => save({ awayMin: +e.target.value }, true)}>
+                {AWAY_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {m === 0 ? "Never" : `after ${m} min idle`}
+                  </option>
+                ))}
+              </select>
+            </Row>
+            <p className="note">
+              With no keyboard or mouse activity (or the lid closed), the focus session pauses as of the moment you left, so time away
+              never counts as focus. Reading or watching without touching anything counts as idle too, so pick a longer time if needed.
+            </p>
+            <Toggle
+              label="Do Not Disturb during focus"
+              hint="On while a focus session runs, off on breaks and pauses."
+              checked={settings.dnd}
+              onChange={(v) => save({ dnd: v }, true)}
+            />
+            {settings.dnd && helpers && !helpers.dndInstalled && (
+              <div className="row">
+                <label className="muted">Needs two shortcuts in the Shortcuts app</label>
+                <div className="row-controls">
+                  <button
+                    className="ghost"
+                    onClick={() => {
+                      setDndMsg("Click “Add Shortcut” in both windows that open…");
+                      api.installDndShortcuts().catch((e) => setDndMsg(String(e)));
+                    }}
+                  >
+                    Install shortcuts
+                  </button>
+                </div>
+              </div>
+            )}
+            {settings.dnd && helpers?.dndInstalled && <p className="note status-ok">✓ “Chronos Focus On” and “Chronos Focus Off” are installed.</p>}
+            {settings.dnd && dndMsg && !helpers?.dndInstalled && <p className="note">{dndMsg}</p>}
+          </section>
+
+          <section className="card">
+            <h3>Planning</h3>
+            <Row label="Add a task from any app">
+              <ShortcutRecorder value={settings.quickAddShortcut} onChange={(v) => save({ quickAddShortcut: v }, true)} />
+            </Row>
+            <p className="note">Opens a small box over whatever you're doing. Enter adds to Today, ⌘Enter adds it and starts focus.</p>
+            <Toggle
+              label="Ask me to plan my day each morning"
+              hint="The first time you're at your Mac each day, Plan opens so you can pick what goes in Today."
+              checked={settings.morningPrompt}
+              onChange={(v) => save({ morningPrompt: v }, true)}
+            />
+            {settings.morningPrompt && (
+              <Row label="Not before">
+                <select value={settings.morningAfterHour} onChange={(e) => save({ morningAfterHour: +e.target.value }, true)}>
+                  {Array.from({ length: 13 }, (_, h) => (
+                    <option key={h} value={h}>
+                      {h === 0 ? "Midnight" : h === 12 ? "12 PM" : `${h} AM`}
+                    </option>
+                  ))}
+                </select>
+              </Row>
+            )}
+          </section>
+
+          <section className="card">
+            <h3>Distractions, reflection & nudges</h3>
+            <Row label="Log a distraction">
+              <ShortcutRecorder value={settings.distractionShortcut} onChange={(v) => save({ distractionShortcut: v }, true)} />
+            </Row>
+            <p className="note">Works from any app. Logs the moment instantly; picking a reason is optional (keys 1–7).</p>
+            <Toggle
+              label="Quick reflection after focus sessions"
+              hint="“How productive was it?” with an optional goal check. Always skippable."
+              checked={settings.reflection}
+              onChange={(v) => save({ reflection: v }, true)}
+            />
+            <Toggle
+              label="Occasional companion messages"
+              hint="A rare line on the clock, e.g. after a long run without a break. At most one every 90 minutes."
+              checked={settings.companion}
+              onChange={(v) => save({ companion: v }, true)}
+            />
+            <Toggle
+              label="Notifications"
+              hint="When a session ends or is paused while you're away."
+              checked={settings.notifications}
+              onChange={(v) => save({ notifications: v }, true)}
+            />
+          </section>
+        </>
+      )}
+
+      {section === "look" && (
+        <>
+          <section className="card">
+            <h3>Appearance</h3>
+            <Row label="Panel and board">
+              <div className="chips">
+                <button className={settings.theme === "glass" ? "on" : ""} onClick={() => save({ theme: "glass" }, true)}>Glass</button>
+                <button className={settings.theme === "retro" ? "on" : ""} onClick={() => save({ theme: "retro" }, true)}>Retro</button>
+              </div>
+            </Row>
+            <p className="note">Light or dark follows your Mac. The clock has its own style below.</p>
+          </section>
+
+          <section className="card">
+            <h3>Widget</h3>
+            <div className="widget-picker">
+              {WIDGETS.map((w) => (
+                <button key={w.id} className={settings.widget === w.id ? "on" : ""} onClick={() => save({ widget: w.id }, true)}>
+                  <span className={`wp-shape ${w.id}`} aria-hidden />
+                  <b>{w.label}</b>
+                  <small>{w.hint}</small>
+                </button>
               ))}
-            </select>
-          </Row>
-        )}
-      </section>
+            </div>
+            <Row label="Style">
+              <div className="chips">
+                <button className={settings.style === "retro" ? "on" : ""} onClick={() => save({ style: "retro" }, true)}>Retro</button>
+                <button className={settings.style === "minimal" ? "on" : ""} onClick={() => save({ style: "minimal" }, true)}>Minimal</button>
+                <button className={settings.style === "glass" ? "on" : ""} onClick={() => save({ style: "glass" }, true)}>Glass</button>
+              </div>
+            </Row>
+            <Row label="Size">
+              <input type="range" min={60} max={200} step={5} value={Math.round(settings.scale * 100)} onChange={(e) => save({ scale: +e.target.value / 100 })} />
+              <span className="value">{Math.round(settings.scale * 100)}%</span>
+            </Row>
+            <p className="note">Also from the clock’s ⋯ menu → Widget Size, or drag its corner.</p>
+          </section>
 
-      <section className="card">
-        <h3>Distractions, reflection & nudges</h3>
-        <Row label="Log a distraction">
-          <ShortcutRecorder value={settings.distractionShortcut} onChange={(v) => save({ distractionShortcut: v }, true)} />
-        </Row>
-        <p className="note">Works from any app. Logs the moment instantly; picking a reason is optional (keys 1–7).</p>
-        <Toggle
-          label="Quick reflection after focus sessions"
-          hint="“How productive was it?” with an optional goal check. Always skippable."
-          checked={settings.reflection}
-          onChange={(v) => save({ reflection: v }, true)}
-        />
-        <Toggle
-          label="Occasional companion messages"
-          hint="A rare line on the clock, e.g. after a long run without a break. At most one every 90 minutes."
-          checked={settings.companion}
-          onChange={(v) => save({ companion: v }, true)}
-        />
-        <Toggle
-          label="Notifications"
-          hint="When a session ends or is paused while you're away."
-          checked={settings.notifications}
-          onChange={(v) => save({ notifications: v }, true)}
-        />
-      </section>
+          <section className="card">
+            <h3>Clock</h3>
+            <Toggle label="Always on top" checked={settings.alwaysOnTop} onChange={(v) => save({ alwaysOnTop: v }, true)} />
+            <Toggle label="Show on every desktop (Space)" checked={settings.allWorkspaces} onChange={(v) => save({ allWorkspaces: v }, true)} />
+            <Row label="Countdown in menu bar">
+              <div className="chips">
+                {(
+                  [
+                    ["off", "Off"],
+                    ["hidden", "When hidden"],
+                    ["always", "Always"],
+                  ] as const
+                ).map(([v, l]) => (
+                  <button key={v} className={settings.menuBarTimer === v ? "on" : ""} onClick={() => save({ menuBarTimer: v }, true)}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </Row>
+            <Row label="Opacity">
+              <input
+                type="range"
+                min={25}
+                max={100}
+                value={Math.round(settings.opacity * 100)}
+                onChange={(e) => save({ opacity: +e.target.value / 100 })}
+              />
+              <span className="value">{Math.round(settings.opacity * 100)}%</span>
+            </Row>
+          </section>
+        </>
+      )}
 
-      <section className="card">
-        <h3>Appearance</h3>
-        <Row label="Panel and board">
-          <div className="chips">
-            <button className={settings.theme === "glass" ? "on" : ""} onClick={() => save({ theme: "glass" }, true)}>Glass</button>
-            <button className={settings.theme === "retro" ? "on" : ""} onClick={() => save({ theme: "retro" }, true)}>Retro</button>
-          </div>
-        </Row>
-        <p className="note">Light or dark follows your Mac. The clock has its own style below.</p>
-      </section>
+      {section === "hide" && (
+        <>
+          <section className="card">
+            <h3>Hide mode</h3>
+            <p className="note">
+              Hiding the clock never pauses the timer. Sessions keep running and keep being recorded. Bring the clock back from the menu bar
+              or with the shortcut.
+            </p>
+            <Row label="Hide / show shortcut">
+              <ShortcutRecorder value={settings.hideShortcut} onChange={(v) => save({ hideShortcut: v }, true)} />
+            </Row>
+            <Toggle
+              label="Hide automatically while sharing or recording"
+              hint="Hides when any app below is running, and comes back when it quits."
+              checked={settings.autoHide}
+              onChange={(v) => save({ autoHide: v }, true)}
+            />
+            {settings.autoHide && (
+              <AppList
+                apps={settings.autoHideApps}
+                running={helpers?.running ?? []}
+                onChange={(autoHideApps) => save({ autoHideApps }, true)}
+              />
+            )}
+            <Toggle
+              label="Invisible in screenshots & screen recordings"
+              hint="You still see the clock; captures don't. Some newer recorders ignore this, so use Hide when it matters."
+              checked={settings.captureProtected}
+              onChange={(v) => save({ captureProtected: v }, true)}
+            />
+          </section>
+        </>
+      )}
 
-      <section className="card">
-        <h3>Widget</h3>
-        <div className="widget-picker">
-          {WIDGETS.map((w) => (
-            <button key={w.id} className={settings.widget === w.id ? "on" : ""} onClick={() => save({ widget: w.id }, true)}>
-              <span className={`wp-shape ${w.id}`} aria-hidden />
-              <b>{w.label}</b>
-              <small>{w.hint}</small>
-            </button>
-          ))}
-        </div>
-        <Row label="Style">
-          <div className="chips">
-            <button className={settings.style === "retro" ? "on" : ""} onClick={() => save({ style: "retro" }, true)}>Retro</button>
-            <button className={settings.style === "minimal" ? "on" : ""} onClick={() => save({ style: "minimal" }, true)}>Minimal</button>
-            <button className={settings.style === "glass" ? "on" : ""} onClick={() => save({ style: "glass" }, true)}>Glass</button>
-          </div>
-        </Row>
-        <Row label="Size">
-          <input type="range" min={60} max={200} step={5} value={Math.round(settings.scale * 100)} onChange={(e) => save({ scale: +e.target.value / 100 })} />
-          <span className="value">{Math.round(settings.scale * 100)}%</span>
-        </Row>
-        <p className="note">Also from the clock’s ⋯ menu → Widget Size, or drag its corner.</p>
-      </section>
+      {section === "general" && (
+        <>
+          <section className="card">
+            <h3>Startup</h3>
+            <Toggle
+              label="Open Chronos at login"
+              hint="Starts quietly with your Mac and puts the clock back where you left it."
+              checked={settings.launchAtLogin}
+              onChange={(v) => save({ launchAtLogin: v }, true)}
+            />
+            <Toggle
+              label="Show in Dock"
+              hint="Off keeps Chronos in the menu bar only. Either way, open it from Launchpad or Spotlight."
+              checked={settings.showInDock}
+              onChange={(v) => save({ showInDock: v }, true)}
+            />
+          </section>
 
-      <section className="card">
-        <h3>Clock</h3>
-        <Toggle label="Always on top" checked={settings.alwaysOnTop} onChange={(v) => save({ alwaysOnTop: v }, true)} />
-        <Toggle label="Show on every desktop (Space)" checked={settings.allWorkspaces} onChange={(v) => save({ allWorkspaces: v }, true)} />
-        <Row label="Countdown in menu bar">
-          <div className="chips">
-            {(
-              [
-                ["off", "Off"],
-                ["hidden", "When hidden"],
-                ["always", "Always"],
-              ] as const
-            ).map(([v, l]) => (
-              <button key={v} className={settings.menuBarTimer === v ? "on" : ""} onClick={() => save({ menuBarTimer: v }, true)}>
-                {l}
-              </button>
-            ))}
-          </div>
-        </Row>
-        <Row label="Opacity">
-          <input
-            type="range"
-            min={25}
-            max={100}
-            value={Math.round(settings.opacity * 100)}
-            onChange={(e) => save({ opacity: +e.target.value / 100 })}
-          />
-          <span className="value">{Math.round(settings.opacity * 100)}%</span>
-        </Row>
-      </section>
+          <WeeklyEmail settings={settings} save={save} />
 
-      <section className="card">
-        <h3>Hide mode</h3>
-        <p className="note">
-          Hiding the clock never pauses the timer. Sessions keep running and keep being recorded. Bring the clock back from the menu bar
-          or with the shortcut.
-        </p>
-        <Row label="Hide / show shortcut">
-          <ShortcutRecorder value={settings.hideShortcut} onChange={(v) => save({ hideShortcut: v }, true)} />
-        </Row>
-        {shortcutError && <p className="error">{shortcutError}</p>}
-        <Toggle
-          label="Hide automatically while sharing or recording"
-          hint="Hides when any app below is running, and comes back when it quits."
-          checked={settings.autoHide}
-          onChange={(v) => save({ autoHide: v }, true)}
-        />
-        {settings.autoHide && (
-          <AppList
-            apps={settings.autoHideApps}
-            running={helpers?.running ?? []}
-            onChange={(autoHideApps) => save({ autoHideApps }, true)}
-          />
-        )}
-        <Toggle
-          label="Invisible in screenshots & screen recordings"
-          hint="You still see the clock; captures don't. Some newer recorders ignore this, so use Hide when it matters."
-          checked={settings.captureProtected}
-          onChange={(v) => save({ captureProtected: v }, true)}
-        />
-      </section>
-
-      <WeeklyEmail settings={settings} save={save} />
-
-      <section className="card">
-        <h3>Startup</h3>
-        <Toggle
-          label="Open Chronos at login"
-          hint="Starts quietly with your Mac and puts the clock back where you left it."
-          checked={settings.launchAtLogin}
-          onChange={(v) => save({ launchAtLogin: v }, true)}
-        />
-        <Toggle
-          label="Show in Dock"
-          hint="Off keeps Chronos in the menu bar only. Either way, open it from Launchpad or Spotlight."
-          checked={settings.showInDock}
-          onChange={(v) => save({ showInDock: v }, true)}
-        />
-      </section>
-
-      <section className="card">
-        <h3>Sound</h3>
-        <Toggle label="Chime when a session ends" checked={settings.sound} onChange={(v) => save({ sound: v }, true)} />
-        <Row label="Volume">
-          <input type="range" min={0} max={100} value={Math.round(settings.volume * 100)} disabled={!settings.sound} onChange={(e) => save({ volume: +e.target.value / 100 })} />
-          <span className="value">{Math.round(settings.volume * 100)}%</span>
-          <button className="ghost" onClick={() => api.testSound()}>Test</button>
-        </Row>
-      </section>
-
-      <section className="card">
-        <h3>Daily goal</h3>
-        <Row label="Focus time per day">
-          <Stepper
-            value={settings.dailyGoalMin / 60}
-            min={0}
-            max={12}
-            step={0.5}
-            onChange={(v) => save({ dailyGoalMin: Math.round(v * 60) }, true)}
-            suffix="hours"
-          />
-        </Row>
-      </section>
-
-      <section className="card">
-        <h3>Your data</h3>
-        <p className="note">
-          Everything stays on this computer in a local SQLite database. There's no account; the only thing that ever leaves your Mac is the weekly email, if you turn it on.
-        </p>
-        {info && (
-          <Row label="Location">
-            <code className="path" title={info.dataDir}>
-              {info.dataDir.length > 36 ? `…${info.dataDir.slice(-35)}` : info.dataDir}
-            </code>
-            <button className="ghost" onClick={() => api.revealDataDir()}>Reveal</button>
-          </Row>
-        )}
-        {info && <p className="note muted">Chronos {info.version}</p>}
-      </section>
+          <section className="card">
+            <h3>Your data</h3>
+            <p className="note">
+              Everything stays on this computer in a local SQLite database. There's no account; the only thing that ever leaves your Mac is the weekly email, if you turn it on.
+            </p>
+            {info && (
+              <Row label="Location">
+                <code className="path" title={info.dataDir}>
+                  {info.dataDir.length > 36 ? `…${info.dataDir.slice(-35)}` : info.dataDir}
+                </code>
+                <button className="ghost" onClick={() => api.revealDataDir()}>Reveal</button>
+              </Row>
+            )}
+            {info && <p className="note muted">Chronos {info.version}</p>}
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -488,9 +547,9 @@ function AppList({ apps, running, onChange }: { apps: string[]; running: string[
         })}
       </div>
       <div className="row">
-        <label className="muted">Add an app (e.g. Keynote, Microsoft Teams)</label>
+        <label className="muted">Add an app</label>
         <div className="row-controls app-add">
-          <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="App name" />
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="e.g. Keynote, Microsoft Teams" />
           <button className="ghost" onClick={add} disabled={!draft.trim()}>
             Add
           </button>
