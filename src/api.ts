@@ -175,7 +175,7 @@ function mockBackend(): Backend {
     endAt: run === "running" ? now() + remaining : null,
     cycle: +(q.get("cycle") ?? 2), longEvery: 4, task: q.get("task"), project: q.get("project"),
     taskId: null, taskEstimateMs: null, taskSpentMs: 0, todayOpen: 0, nextTask: null, preset: "standard",
-    sessionNumber: 3, completedToday: 2, focusMsToday: 52 * MINUTE, goalMs: 180 * MINUTE,
+    sessionNumber: 3, completedToday: 2, focusMsToday: q.has("empty") ? 0 : 52 * MINUTE, goalMs: 180 * MINUTE,
     distractionsToday: 3, awayMs: q.has("away") ? +q.get("away")! * MINUTE : null, companion: q.get("companion"),
     hidden: false, now: now(),
   };
@@ -417,7 +417,12 @@ function mockBackend(): Backend {
       }
       return emit();
     },
-    todayStats: async () => ({
+    // ?empty previews a day with nothing done yet.
+    todayStats: async () => q.has("empty") ? {
+      focusSessions: 0, completed: 0, abandoned: 0, interrupted: 0, focusMs: 0, breakMs: 0, avgFocusMs: 0, longestFocusMs: 0,
+      currentStreak: 0, firstStart: null, lastEnd: null, sessions: [], distractions: 0, streak: { current: 4, best: 9, todayDone: false },
+      projects: [], distractionList: [], weekScore: 78,
+    } : ({
       focusSessions: 5, completed: 4, abandoned: 1, interrupted: 2,
       focusMs: 134 * MINUTE, breakMs: 16 * MINUTE, avgFocusMs: 27 * MINUTE, longestFocusMs: 47 * MINUTE,
       currentStreak: 2, firstStart: sessions[0].startedAt, lastEnd: sessions[sessions.length - 1].endedAt, sessions,

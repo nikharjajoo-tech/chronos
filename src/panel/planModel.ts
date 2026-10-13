@@ -84,9 +84,9 @@ export function applyMove(tasks: TaskRow[], id: number, bucket: Bucket, beforeId
   return tasks.map((t) => (t.id === id ? { ...t, bucket, position, leftover: t.leftover && bucket === "today" } : t));
 }
 
-// System colours that sit well on light and dark glass. Orange and red are
-// left out: they mean "live" and "over".
-const PROJECT_COLORS = ["#007aff", "#af52de", "#34c759", "#30b0c7", "#5856d6", "#ff2d55", "#a2845e", "#00c7be"];
+// Colours that sit well on light and dark glass and tell apart at dot size.
+// Left out: orange and red ("live", "over"), cyan and purple (breaks).
+const PROJECT_COLORS = ["#007aff", "#5856d6", "#ff2d55", "#34c759", "#a2845e", "#00c7be", "#d9a600", "#5e7a99", "#8a9a1b"];
 
 /** A stable colour per project, so #job-search looks the same everywhere. */
 export function projectColor(name: string): string {
