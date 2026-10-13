@@ -50,7 +50,7 @@ html.panel-window body {
   font: 14px/1.45 "Avenir Next", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-.panel { min-height: 100vh; display: flex; flex-direction: column; }
+.panel { min-height: 100vh; display: flex; flex-direction: column; overflow-x: clip; }
 
 .panel-head {
   position: sticky;
@@ -97,6 +97,9 @@ html.panel-window body {
 .tabs button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
 
 .panel-body { padding: 16px 20px 28px; }
+/* In a wide window the panel layout stays a readable column, centred; the
+   board is what uses the width. */
+.panel:not(.board-layout) .panel-body { width: 100%; max-width: 680px; margin: 0 auto; box-sizing: border-box; }
 .today, .settings { display: flex; flex-direction: column; gap: 14px; }
 
 .card {

@@ -122,7 +122,7 @@ html.dragging-task, html.dragging-task * { cursor: grabbing !important; }
 .tc-project + .tc-from { margin-left: -4px; }
 .tc-project + .tc-from::before { content: "· "; }
 .live-tag { font-size: 11px; font-weight: 600; line-height: 17px; padding: 0 7px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
-.tc-progress { flex: 1; min-width: 40px; height: 3px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.tc-progress { flex: 1; min-width: 40px; max-width: 160px; height: 3px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
 .tc-progress i { display: block; height: 100%; background: var(--accent); }
 .tc-est { flex: none; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .tc-est.live { color: var(--accent-text); font-weight: 600; }
@@ -182,7 +182,15 @@ html.dragging-task, html.dragging-task * { cursor: grabbing !important; }
   gap: 10px;
   margin: 0 -20px;
   padding: 12px 20px 16px;
-  background: linear-gradient(transparent, var(--wash, var(--bg)) 14px);
+}
+/* Frosted like the header, and as wide as the window even when the column
+   is narrower. */
+.plan-foot::before {
+  content: ""; position: absolute; z-index: -1; top: 0; bottom: 0; left: 50%; width: 100vw; transform: translateX(-50%);
+  background: var(--wash, var(--bg));
+  border-top: 0.5px solid var(--line);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 .plan-foot > span { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-3); }
 button.primary.big {
