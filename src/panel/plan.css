@@ -306,6 +306,54 @@ html[data-theme="glass"] { --tile: rgba(255, 255, 255, 0.88); }
 .tc-note { white-space: nowrap; }
 .board-col .done-group { margin-top: 4px; }
 
+/* ── morning sheet ─────────────────────────────────────────────────────── */
+:root { --sheet-bg: var(--card-solid); }
+html[data-theme="glass"] { --sheet-bg: rgba(250, 250, 252, 0.94); }
+@media (prefers-color-scheme: dark) {
+  html[data-theme="glass"] { --sheet-bg: rgba(44, 44, 46, 0.95); }
+}
+.m-backdrop {
+  position: fixed; inset: var(--head-h) 0 0 0; z-index: 30; display: grid; place-items: center; padding: 24px;
+  background: rgba(0, 0, 0, 0.16); animation: m-fade 0.18s ease-out;
+}
+.m-sheet {
+  width: min(460px, 100%); max-height: calc(100vh - var(--head-h) - 48px); box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 14px;
+  background: var(--sheet-bg); border: 1px solid var(--line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  animation: m-rise 0.22s ease-out;
+}
+@keyframes m-fade { from { opacity: 0; } }
+@keyframes m-rise { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
+.m-sheet h3 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.2px; }
+.m-sub { color: var(--ink-3); }
+.m-scroll { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+.m-group { display: flex; flex-direction: column; gap: 2px; }
+.m-label { font-size: 11px; font-weight: 600; color: var(--ink-3); padding-bottom: 2px; }
+.m-choice { display: flex; align-items: center; gap: 10px; padding: 5px 4px; border-radius: 7px; cursor: pointer; }
+.m-choice:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.m-choice:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent); }
+.m-box {
+  width: 18px; height: 18px; flex: none; box-sizing: border-box; border-radius: 50%; display: grid; place-items: center;
+  border: 1.5px solid color-mix(in srgb, var(--ink-3) 70%, transparent); color: var(--accent-ink);
+}
+.m-choice.on .m-box { background: var(--accent); border-color: var(--accent); }
+.m-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.m-title small { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--ink-3); }
+.m-title small i { width: 6px; height: 6px; border-radius: 50%; }
+.m-est { flex: none; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.m-more { align-self: flex-start; font-size: 12px; }
+.m-empty { margin: 0; color: var(--ink-3); font-size: 12.5px; }
+.m-add { height: 32px; }
+.m-total { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--ink-3); }
+.m-total strong { color: var(--ink); font-weight: 600; }
+.m-total .over { color: var(--accent-text); font-weight: 600; }
+.m-sheet .load-bar { margin-top: -4px; }
+.m-actions { display: flex; align-items: center; gap: 8px; }
+.m-count { flex: 1; font-size: 12px; color: var(--ink-3); }
+html[data-theme="glass"] .m-sheet { border-width: 0.5px; }
+
 /* ── Glass ─────────────────────────────────────────────────────────────── */
 html[data-theme="glass"] .task-list,
 html[data-theme="glass"] .quick-add,

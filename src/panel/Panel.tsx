@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useSettings, useTheme } from "../hooks";
-import type { PlanMode } from "../types";
+import type { MorningState, PlanMode } from "../types";
+import { Morning } from "./Morning";
 import { History } from "./History";
 import { Insights } from "./Insights";
 import { Plan } from "./Plan";
@@ -25,7 +26,20 @@ export function Panel() {
   const [settings] = useSettings();
   useTheme(settings);
   const [planMode, setPlanModeState] = useState<PlanMode | null>(null);
-  const board = tab === "plan" && planMode === "board";
+  const [morning, setMorning] = useState<MorningState | null>(null);
+  // The morning sheet always opens over the board.
+  const board = tab === "plan" && (planMode === "board" || morning !== null);
+
+  useEffect(() => {
+    const check = () =>
+      api.morningState().then((m) => {
+        if (!m.open) return;
+        setTab("plan");
+        setMorning(m);
+      });
+    check();
+    return api.onMorning(check);
+  }, []);
 
   useEffect(() => void api.planMode().then(setPlanModeState), []);
   // Board view is the same window, widened. Other tabs always use panel size;
@@ -65,7 +79,21 @@ export function Panel() {
           ))}
         </nav>
       </header>
-      <main className="panel-body">{tab === "today" ? <Today /> : tab === "plan" ? planMode && <Plan mode={planMode} setMode={setPlanMode} /> : tab === "history" ? <History /> : tab === "insights" ? <Insights /> : <SettingsView />}</main>
+      <main className="panel-body">{tab === "today" ? <Today /> : tab === "plan" ? planMode && <Plan mode={morning ? "board" : planMode} setMode={setPlanMode} /> : tab === "history" ? <History /> : tab === "insights" ? <Insights /> : <SettingsView />}</main>
+      {morning && tab === "plan" && (
+        <Morning
+          state={morning}
+          onStart={() => {
+            // Back to the panel, with the top Today task ready on the clock.
+            setPlanMode("panel");
+            setMorning(null);
+          }}
+          onNotToday={() => {
+            setPlanMode("board");
+            setMorning(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 // screenshotted without the desktop shell. Mock state is seeded from the URL,
 // e.g. ?view=clock&phase=focus&run=running&remaining=1122&task=Write
 
-import type { Action, AppInfo, Bucket, PlanMode, EmailStatus, HelperStatus, InsightsView, ParsedTask, PeriodStats, Quick, Settings, Snapshot, TaskPatch, TaskRow, TodayStats } from "./types";
+import type { Action, AppInfo, Bucket, MorningState, PlanMode, EmailStatus, HelperStatus, InsightsView, ParsedTask, PeriodStats, Quick, Settings, Snapshot, TaskPatch, TaskRow, TodayStats } from "./types";
 import { MINUTE } from "./format";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
@@ -24,6 +24,12 @@ export interface Backend {
   taskDelete(id: number): Promise<void>;
   taskUndoDelete(): Promise<TaskRow | null>;
   onTasks(cb: () => void): Unlisten;
+  morningState(): Promise<MorningState>;
+  /** "Start the day": these tasks make up Today, in this order. */
+  morningCommit(todayIds: number[]): Promise<void>;
+  morningDismiss(): Promise<void>;
+  /** The morning sheet should open. */
+  onMorning(cb: () => void): Unlisten;
   todayStats(): Promise<TodayStats>;
   periodStats(kind: "week" | "month", offset: number): Promise<PeriodStats>;
   recentProjects(): Promise<string[]>;
@@ -100,6 +106,10 @@ function tauriBackend(): Backend {
     taskDelete: (id) => invoke("task_delete", { id }),
     taskUndoDelete: () => invoke("task_undo_delete"),
     onTasks: (cb) => listen("chronos://tasks", cb),
+    morningState: () => invoke("morning_state"),
+    morningCommit: (todayIds) => invoke("morning_commit", { todayIds }),
+    morningDismiss: () => invoke("morning_dismiss"),
+    onMorning: (cb) => listen("chronos://morning", cb),
     todayStats: () => invoke("today_stats"),
     periodStats: (kind, offset) => invoke("period_stats", { kind, offset }),
     recentProjects: () => invoke("recent_projects"),
@@ -152,7 +162,7 @@ function mockBackend(): Backend {
     theme: (q.get("theme") as Settings["theme"]) ?? "glass",
     scale: 1, launchAtLogin: true, showInDock: false,
     awayMin: 5, autoHide: true, autoHideApps: ["CptHost", "screencaptureui", "obs"], dnd: false,
-    menuBarTimer: "off", distractionShortcut: "Control+Alt+D", quickAddShortcut: "Control+Alt+T", reflection: true, notifications: true, companion: true,
+    menuBarTimer: "off", distractionShortcut: "Control+Alt+D", quickAddShortcut: "Control+Alt+T", morningPrompt: true, morningAfterHour: 5, reflection: true, notifications: true, companion: true,
     emailReport: q.has("email"), emailTo: q.has("email") ? "you@gmail.com" : "", emailFrom: q.has("email") ? "you@gmail.com" : "", emailDay: 0, emailHour: 9,
     sound: true, volume: 0.6, dailyGoalMin: 180,
   };
@@ -199,6 +209,8 @@ function mockBackend(): Backend {
   }
   let deleted: TaskRow | null = null;
   let planMode: PlanMode = q.has("board") ? "board" : "panel";
+  // ?morning opens the morning sheet.
+  let morningOpen = q.has("morning");
   const open = (b: Bucket) => tasks.filter((t) => t.bucket === b && !t.done).sort((a, c) => a.position - c.position);
   const find = (id: number) => tasks.find((t) => t.id === id);
   const live = () => (snap.taskId == null ? undefined : find(snap.taskId));
@@ -479,6 +491,33 @@ function mockBackend(): Backend {
       taskSubs.add(cb);
       return () => taskSubs.delete(cb);
     },
+    morningState: async () => ({
+      open: morningOpen,
+      today: open("today").map((t) => ({ ...t })),
+      week: open("week").map((t) => ({ ...t })),
+      backlog: open("backlog").slice(0, 5).map((t) => ({ ...t })),
+    }),
+    morningCommit: async (ids) => {
+      const firstWeek = open("week")[0]?.id ?? null;
+      for (const t of open("today")) {
+        if (ids.includes(t.id)) continue;
+        t.position = place("week", firstWeek, t.id);
+        t.bucket = "week";
+        t.movedAt = now();
+        t.leftover = false;
+      }
+      for (const id of ids) {
+        const t = find(id);
+        if (!t || t.done) continue;
+        t.position = place("today", null, id);
+        if (t.bucket !== "today") t.movedAt = now();
+        t.bucket = "today";
+      }
+      morningOpen = false;
+      tasksChanged();
+    },
+    morningDismiss: async () => void (morningOpen = false),
+    onMorning: () => () => {},
     recentProjects: async () => ["job-search", "portfolio"],
     logDistraction: async () => {},
     setDistractionCategory: async () => {},

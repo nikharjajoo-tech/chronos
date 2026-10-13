@@ -152,6 +152,23 @@ export function SettingsView() {
           <ShortcutRecorder value={settings.quickAddShortcut} onChange={(v) => save({ quickAddShortcut: v }, true)} />
         </Row>
         <p className="note">Opens a small box over whatever you're doing. Enter adds to Today, ⌘Enter adds it and starts focus.</p>
+        <Toggle
+          label="Ask me to plan my day each morning"
+          hint="The first time you're at your Mac each day, Plan opens so you can pick what goes in Today."
+          checked={settings.morningPrompt}
+          onChange={(v) => save({ morningPrompt: v }, true)}
+        />
+        {settings.morningPrompt && (
+          <Row label="Not before">
+            <select value={settings.morningAfterHour} onChange={(e) => save({ morningAfterHour: +e.target.value }, true)}>
+              {Array.from({ length: 13 }, (_, h) => (
+                <option key={h} value={h}>
+                  {h === 0 ? "Midnight" : h === 12 ? "12 PM" : `${h} AM`}
+                </option>
+              ))}
+            </select>
+          </Row>
+        )}
       </section>
 
       <section className="card">

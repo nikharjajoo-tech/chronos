@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 const K_SETTINGS: &str = "settings";
 const K_TIMER: &str = "timer_state";
 const K_DISMISSED: &str = "suggestions_dismissed";
+/// The local date ("2026-10-13") the morning prompt last opened.
+const K_MORNING: &str = "morning_shown";
 /// At most one companion line per this long (the goal line is exempt).
 const COMPANION_GAP_MS: i64 = 90 * 60_000;
 
@@ -92,6 +94,19 @@ pub struct Snapshot {
     pub companion: Option<String>,
     pub hidden: bool,
     pub now: i64,
+}
+
+/// How many backlog tasks the morning sheet offers.
+const MORNING_BACKLOG: usize = 5;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MorningState {
+    /// The sheet is waiting to be answered.
+    pub open: bool,
+    pub today: Vec<TaskRow>,
+    pub week: Vec<TaskRow>,
+    pub backlog: Vec<TaskRow>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -551,6 +566,57 @@ impl Engine {
             }
         };
         self.after(finished, now)
+    }
+
+    /// Whether the morning prompt should open now: once a local day, after
+    /// the chosen hour, while you are at the Mac and not sharing the screen.
+    pub fn morning_due(&self, now: i64, idle_ms: i64, sharing: bool) -> bool {
+        let s = &self.settings;
+        s.morning_prompt
+            && !sharing
+            && idle_ms < MINUTE
+            && local_hour(now) >= s.morning_after_hour as usize
+            && self.db.kv_get::<String>(K_MORNING) != Some(local_date(now).to_string())
+    }
+
+    pub fn mark_morning_shown(&self, now: i64) {
+        let _ = self.db.kv_set(K_MORNING, &local_date(now).to_string());
+    }
+
+    /// What the morning sheet offers: everything open in Today (ticked),
+    /// This week, and the top of the backlog.
+    pub fn morning_state(&self, open: bool, now: i64) -> MorningState {
+        let today_start = day_bounds(now).0;
+        let list = |b: Bucket| {
+            let mut rows = self.db.open_tasks(b, today_start).unwrap_or_default();
+            for r in &mut rows {
+                r.spent_ms += self.timer.task_credit(r.id, now);
+            }
+            rows
+        };
+        let mut backlog = list(Bucket::Backlog);
+        backlog.truncate(MORNING_BACKLOG);
+        MorningState { open, today: list(Bucket::Today), week: list(Bucket::Week), backlog }
+    }
+
+    /// "Start the day": the ticked tasks make up Today, in the order given.
+    /// Open Today tasks that weren't ticked go back to the top of This week.
+    pub fn morning_commit(&mut self, today_ids: &[i64], now: i64) -> Result<(), String> {
+        let today_start = day_bounds(now).0;
+        let err = |e: rusqlite::Error| e.to_string();
+        let first_week = self.db.open_tasks(Bucket::Week, today_start).map_err(err)?.first().map(|r| r.id);
+        for t in self.db.open_tasks(Bucket::Today, today_start).map_err(err)? {
+            if !today_ids.contains(&t.id) {
+                self.db.move_task(t.id, Bucket::Week, first_week, now).map_err(err)?;
+            }
+        }
+        for &id in today_ids {
+            if self.task_row(id, now).is_some_and(|r| !r.done) {
+                self.db.move_task(id, Bucket::Today, None, now).map_err(err)?;
+            }
+        }
+        self.reconcile_live(now);
+        Ok(())
     }
 
     /// Open tasks plus tasks done in the last `done_days` local days, with
@@ -1136,6 +1202,48 @@ mod tests {
         e.apply(Action::DoneTask, t0 + 9 * MINUTE);
         let s = e.snapshot(t0 + 10 * MINUTE);
         assert_eq!((s.run, s.task_id, s.task, s.today_open), (RunState::Running, None, None, 0), "free focus");
+    }
+
+    #[test]
+    fn morning_shown_once_per_day() {
+        let e = engine();
+        let t0 = now();
+        assert!(e.morning_due(t0, 0, false));
+        e.mark_morning_shown(t0);
+        assert!(!e.morning_due(t0 + 60 * MINUTE, 0, false), "not again today");
+        assert!(e.morning_due(t0 + 24 * 60 * MINUTE, 0, false), "tomorrow");
+    }
+
+    #[test]
+    fn morning_waits_for_the_hour_presence_and_no_sharing() {
+        let mut e = engine();
+        let midnight = day_bounds(now_ms()).0;
+        assert!(!e.morning_due(midnight + 4 * 60 * MINUTE, 0, false), "before 5:00");
+        assert!(e.morning_due(midnight + 5 * 60 * MINUTE, 0, false));
+        assert!(!e.morning_due(midnight + 6 * 60 * MINUTE, 2 * MINUTE, false), "away from the Mac");
+        assert!(!e.morning_due(midnight + 6 * 60 * MINUTE, 0, true), "sharing the screen");
+        e.settings.morning_prompt = false;
+        assert!(!e.morning_due(midnight + 6 * 60 * MINUTE, 0, false), "turned off");
+    }
+
+    #[test]
+    fn morning_commit_moves_ticked_and_returns_unticked_to_week() {
+        let mut e = engine();
+        let t0 = now();
+        let old = add_task(&e, "old", Bucket::Today, t0);
+        let keep = add_task(&e, "keep", Bucket::Today, t0);
+        let w1 = add_task(&e, "w1", Bucket::Week, t0);
+        add_task(&e, "w2", Bucket::Week, t0);
+        let b1 = add_task(&e, "b1", Bucket::Backlog, t0);
+
+        let st = e.morning_state(true, t0);
+        assert_eq!((st.today.len(), st.week.len(), st.backlog.len()), (2, 2, 1));
+
+        e.morning_commit(&[b1, keep, w1], t0).unwrap();
+        assert_eq!(today_titles(&e, t0), ["b1", "keep", "w1"], "in the order ticked");
+        let week: Vec<_> = e.db.open_tasks(Bucket::Week, day_bounds(t0).0).unwrap().into_iter().map(|r| r.id).collect();
+        assert_eq!(week[0], old, "unticked leftover goes to the top of This week");
+        assert_eq!(week.len(), 2);
     }
 
     #[test]

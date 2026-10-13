@@ -74,6 +74,16 @@ export interface TaskRow {
   leftover: boolean;
 }
 
+/** The morning sheet. Everything open in Today starts ticked. */
+export interface MorningState {
+  /** Waiting to be answered. */
+  open: boolean;
+  today: TaskRow[];
+  week: TaskRow[];
+  /** The top few backlog tasks. */
+  backlog: TaskRow[];
+}
+
 /** What `task_parse` made of typed text. */
 export interface ParsedTask {
   title: string;
@@ -115,6 +125,10 @@ export interface Settings {
   distractionShortcut: string;
   /** Opens the add-task popup from any app. */
   quickAddShortcut: string;
+  /** Ask what goes into Today on the first activity of the day. */
+  morningPrompt: boolean;
+  /** Not before this hour (0–12). */
+  morningAfterHour: number;
   reflection: boolean;
   notifications: boolean;
   companion: boolean;

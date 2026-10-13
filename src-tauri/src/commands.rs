@@ -3,7 +3,7 @@
 
 use crate::analytics::PeriodStats;
 use crate::companion::{self, Quick};
-use crate::engine::{now_ms, Action, InsightsView, Snapshot, TaskPatch, TodayStats};
+use crate::engine::{now_ms, Action, InsightsView, MorningState, Snapshot, TaskPatch, TodayStats};
 use crate::tasks::{self, Bucket, ParsedTask, TaskRow};
 use crate::sysmac;
 use crate::settings::Settings;
@@ -303,6 +303,30 @@ pub fn show_clock_menu(app: AppHandle) -> Result<(), String> {
     let menu = shell::clock_menu(&app).map_err(|e| e.to_string())?;
     let w = app.get_webview_window(CLOCK).ok_or("no clock window")?;
     w.popup_menu(&menu).map_err(|e| e.to_string())
+}
+
+/// The morning sheet's contents, and whether it is waiting to be answered.
+#[tauri::command]
+pub fn morning_state(app: AppHandle, state: State<AppState>) -> MorningState {
+    let open = companion::morning_open(&app);
+    engine(&state).morning_state(open, now_ms())
+}
+
+/// "Start the day": the ticked tasks make up Today, in this order.
+#[tauri::command]
+pub fn morning_commit(app: AppHandle, today_ids: Vec<i64>) -> Result<(), String> {
+    let now = now_ms();
+    let snap = shell::with_engine(&app, |e| e.morning_commit(&today_ids, now).map(|_| e.snapshot(now)))?;
+    companion::close_morning(&app);
+    shell::broadcast(&app, &snap);
+    shell::tasks_changed(&app);
+    Ok(())
+}
+
+/// "Not today": nothing moves.
+#[tauri::command]
+pub fn morning_dismiss(app: AppHandle) {
+    companion::close_morning(&app);
 }
 
 /// The layout the Plan tab opens in: "panel" or "board".

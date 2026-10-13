@@ -16,8 +16,8 @@ export const COLUMN_LABEL: Record<Column, string> = {
 /** Left to right on the board; ⌥← and ⌥→ step along it. */
 export const BOARD_BUCKETS: Bucket[] = ["backlog", "week", "today"];
 
-/** The panel layout's column switcher. */
-export const PANEL_COLUMNS: Column[] = ["today", "week", "backlog", "done"];
+/** The panel layout's column switcher, in the board's order. */
+export const PANEL_COLUMNS: Column[] = ["backlog", "week", "today", "done"];
 
 const DAY = 86_400_000;
 

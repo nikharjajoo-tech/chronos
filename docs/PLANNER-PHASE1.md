@@ -370,7 +370,7 @@ The Plan tab is a new tab in the existing **panel** window. Board view is the
 |---|---|---|
 | Window size | 480 × 680 (current panel) | 1240 × 760 by default |
 | Minimum | 420 × 520 | 960 × 560 |
-| Columns | one at a time: segmented **Today · This week · Backlog · Done** | four side by side: **Backlog · This week · Today · Done** |
+| Columns | one at a time: segmented **Backlog · This week · Today · Done** (the board's order; opens on Today) | four side by side: **Backlog · This week · Today · Done** |
 | Extras | the Today header with planned vs goal | sidebar: project filter, Today's load |
 
 Tabs become **Today · Plan · History · Insights · Settings**. To fit five tabs
@@ -498,6 +498,7 @@ in the morning therefore shows it once, and never again that day.
 | Group | Contents | Default |
 |---|---|---|
 | Left over | open Today tasks from earlier days | ticked |
+| Already in Today | open Today tasks added today (e.g. with ⌃⌥T) | ticked |
 | From this week | open Week tasks | not ticked |
 | From the backlog | top 5 Backlog tasks (collapsed) | not ticked |
 
@@ -514,6 +515,10 @@ in the morning therefore shows it once, and never again that day.
   started**.
 - **Not today** → `morning_dismiss()`. Nothing moves, and the window stays
   in board view.
+- **Esc** works as Not today. The sheet is answered once; it doesn't come
+  back that day either way.
+- If you already used the board, Start the day still returns to the panel
+  (agreed); ⌘E brings the board back.
 
 **Settings** (Settings tab, new "Planning" card):
 

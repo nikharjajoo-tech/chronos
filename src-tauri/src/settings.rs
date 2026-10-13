@@ -89,6 +89,10 @@ pub struct Settings {
     pub distraction_shortcut: String,
     /// Opens the add-task popup from any app.
     pub quick_add_shortcut: String,
+    /// Ask what goes into Today on the first activity of the day.
+    pub morning_prompt: bool,
+    /// The morning prompt waits until this hour (0–12).
+    pub morning_after_hour: u32,
     /// Ask "how did it go?" after a focus session.
     pub reflection: bool,
     pub notifications: bool,
@@ -140,6 +144,8 @@ impl Default for Settings {
             menu_bar_timer: "off".into(),
             distraction_shortcut: "Control+Alt+D".into(),
             quick_add_shortcut: "Control+Alt+T".into(),
+            morning_prompt: true,
+            morning_after_hour: 5,
             reflection: true,
             notifications: true,
             companion: true,
@@ -196,6 +202,7 @@ impl Settings {
             self.quick_add_shortcut = Settings::default().quick_add_shortcut;
         }
         self.away_min = self.away_min.min(60);
+        self.morning_after_hour = self.morning_after_hour.min(12);
         self.email_day = self.email_day.min(6);
         self.email_hour = self.email_hour.min(23);
         self.email_to = self.email_to.trim().chars().take(254).collect();

@@ -28,6 +28,8 @@ pub struct Companion {
     dnd_on: Option<bool>,
     tray_title: Option<String>,
     quick: Option<Quick>,
+    /// The morning sheet is waiting to be answered.
+    morning_open: bool,
 }
 
 pub struct CompanionState(pub Mutex<Companion>);
@@ -116,6 +118,10 @@ pub fn spawn_watchdog(app: AppHandle) {
             if n % 2 == 0 {
                 auto_hide_check(&app, &settings);
             }
+            // Morning prompt: check once a minute (and soon after launch).
+            if n % 120 == 4 {
+                maybe_open_morning(&app);
+            }
             // Weekly email: check once a minute (and soon after launch).
             if settings.email_report && n % 120 == 6 {
                 let app = app.clone();
@@ -123,6 +129,37 @@ pub fn spawn_watchdog(app: AppHandle) {
             }
         }
     });
+}
+
+pub const EV_MORNING: &str = "chronos://morning";
+
+/// Open the panel on Plan with the morning sheet, once a day.
+fn maybe_open_morning(app: &AppHandle) {
+    let now = now_ms();
+    let idle = sysmac::idle_ms();
+    let sharing = is_sharing(app);
+    let due = shell::with_engine(app, |e| {
+        let due = e.morning_due(now, idle, sharing);
+        if due {
+            e.mark_morning_shown(now);
+        }
+        due
+    });
+    if !due {
+        return;
+    }
+    comp(app, |c| c.morning_open = true);
+    shell::open_panel(app, Some("plan"));
+    let _ = app.emit(EV_MORNING, ());
+}
+
+pub fn morning_open(app: &AppHandle) -> bool {
+    comp(app, |c| c.morning_open)
+}
+
+/// The sheet was answered (Start the day / Not today).
+pub fn close_morning(app: &AppHandle) {
+    comp(app, |c| c.morning_open = false);
 }
 
 /// Sound, then either the reflection popup or a notification.
