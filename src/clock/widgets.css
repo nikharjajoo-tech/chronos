@@ -241,7 +241,8 @@
    clock window has no vibrancy, so the surface is mostly opaque; the
    backdrop blur only shows in the browser preview. */
 .style-glass {
-  --m-surface: rgba(36, 36, 38, 0.86);
+  --m-surface: rgba(36, 36, 38, 0.92);
+  --g-sheen: rgba(255, 255, 255, 0.07);
   --m-border: rgba(255, 255, 255, 0.14);
   --m-text: #f5f5f7;
   --m-muted: #98989d;
@@ -258,7 +259,8 @@
 .style-glass .phase-long_break { --glow: #bf5af2; --glow-rgb: 191, 90, 242; }
 @media (prefers-color-scheme: light) {
   .style-glass {
-    --m-surface: rgba(250, 250, 252, 0.86);
+    --m-surface: rgba(248, 248, 250, 0.92);
+    --g-sheen: rgba(255, 255, 255, 0.75);
     --m-border: rgba(0, 0, 0, 0.12);
     --m-text: #1d1d1f;
     --m-muted: #6e6e73;
@@ -273,8 +275,11 @@
   .style-glass .phase-long_break { --glow: #af52de; --glow-rgb: 175, 82, 222; }
 }
 
+/* A soft highlight across the top and a hairline edge, so the surface
+   reads as glass even without the blur behind it. */
 .style-glass .casing {
-  box-shadow: 0 0 0 0.5px var(--m-border), 0 10px 28px rgba(0, 0, 0, 0.22), inset 0 0.5px 0 rgba(255, 255, 255, 0.35);
+  background: linear-gradient(180deg, var(--g-sheen), transparent 55%), var(--m-surface);
+  box-shadow: 0 0 0 0.5px var(--m-border), 0 10px 28px rgba(0, 0, 0, 0.22), inset 0 0.5px 0 rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(30px) saturate(180%);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
 }
@@ -284,7 +289,7 @@
 .style-glass .mdigits { font: 300 42px/1 -apple-system, "SF Pro Display", system-ui, sans-serif; font-variant-numeric: tabular-nums; }
 .style-glass .crt .mdigits { font-size: 27px; }
 .style-glass .plate,
-.style-glass .plate.chip { letter-spacing: 1.2px; font-weight: 600; }
+.style-glass .plate.chip { letter-spacing: 1.2px; font-weight: 700; color: color-mix(in srgb, var(--glow) 72%, var(--m-text)); }
 .style-glass .key.main { font-weight: 600; }
 .style-glass .key.small:hover,
 .style-glass .key.mini:hover { background: var(--m-key-hover); }

@@ -128,7 +128,12 @@ html.quick-window body {
     --edge: 0 0 0 0.5px rgba(0, 0, 0, 0.14), 0 10px 26px rgba(0, 0, 0, 0.2);
   }
 }
-/* The system font runs wider than Avenir; keep the seven reasons on two rows. */
-.quick-root.style-glass .cats { gap: 3px; }
-.quick-root.style-glass .cats button { font-size: 11px; padding: 3px 5px 3px 3px; gap: 3px; }
+/* The system font runs wider than Avenir; keep the seven reasons on two
+   rows, but make them taller so the card fills its window. */
+.quick-root.style-glass .quick-card { gap: 9px; padding: 11px 12px 12px; }
+.quick-root.style-glass .cats { gap: 5px 3px; }
+.quick-root.style-glass .cats button { font-size: 11px; padding: 5px 5px 5px 4px; gap: 3px; }
+.quick-root.style-glass .faces button { padding: 7px 0 5px; gap: 2px; }
+.quick-root.style-glass .faces span { font-size: 21px; }
+.quick-root.style-glass .goal button { padding: 4px 9px; }
 .quick-root.style-glass .cats kbd { padding: 2px; }
