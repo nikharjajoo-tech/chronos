@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { fmtDuration, prettyShortcut } from "../format";
+import { fmtDuration, prettyShortcut, ratingFace } from "../format";
 import { useSettings } from "../hooks";
 import { DISTRACTION_CATEGORIES, type Named, type PeriodStats } from "../types";
+import { Figure, Projects } from "./Today";
 
 type Kind = "week" | "month";
 const DAY_MS = 86_400_000;
@@ -32,49 +33,63 @@ export function History() {
   const current = offset === 0;
   const vs = current ? `vs same days last ${kind}` : `vs previous ${kind}`;
 
+  const extras = [
+    t.focusSessions > 0 && `avg session ${fmtDuration(t.avgSessionMs)}`,
+    t.focusSessions > 0 && `${Math.round(t.completionRate * 100)}% finished`,
+    `focus on ${t.activeDays} of ${t.elapsedDays} ${t.elapsedDays === 1 ? "day" : "days"}`,
+    data.streak.current > 0 && `${data.streak.current}-day streak (best ${data.streak.best})`,
+    t.avgRating && `rating ${ratingFace(t.avgRating)} ${t.avgRating.toFixed(1)}/4`,
+  ].filter((e): e is string => !!e);
+
   return (
     <div className="history">
-      <div className="history-bar">
-        <div className="segmented small">
-          {(["week", "month"] as Kind[]).map((k) => (
-            <button
-              key={k}
-              className={kind === k ? "on" : ""}
-              onClick={() => {
-                setKind(k);
-                setOffset(0);
-              }}
-            >
-              {k === "week" ? "Week" : "Month"}
-            </button>
-          ))}
+      <header className="hist-head">
+        <div className="td-title">
+          <h1>{periodLabel(kind, data, offset)}</h1>
+          <span className="td-date">{rangeLabel(data)}</span>
         </div>
-        <div className="period-nav">
-          <button onClick={() => setOffset(offset - 1)} aria-label={`Previous ${kind}`}>‹</button>
-          <span>{periodLabel(kind, data, offset)}</span>
-          <button onClick={() => setOffset(offset + 1)} disabled={current} aria-label={`Next ${kind}`}>›</button>
+        <div className="hist-controls">
+          <div className="segmented small">
+            {(["week", "month"] as Kind[]).map((k) => (
+              <button
+                key={k}
+                className={kind === k ? "on" : ""}
+                onClick={() => {
+                  setKind(k);
+                  setOffset(0);
+                }}
+              >
+                {k === "week" ? "Week" : "Month"}
+              </button>
+            ))}
+          </div>
+          <div className="period-nav">
+            <button onClick={() => setOffset(offset - 1)} aria-label={`Previous ${kind}`}>‹</button>
+            <button onClick={() => setOffset(offset + 1)} disabled={current} aria-label={`Next ${kind}`}>›</button>
+          </div>
         </div>
-      </div>
+      </header>
 
-      <section className="grid">
-        <Tile label="Focus time" value={fmtDuration(t.focusMs)} delta={change(t.focusMs, p.focusMs)} vs={vs} />
-        <Tile label="Average per day" value={fmtDuration(t.avgDailyFocusMs)} delta={change(t.avgDailyFocusMs, p.avgDailyFocusMs)} vs={vs} />
-        <Tile
-          label="Sessions completed"
-          value={`${t.completed}`}
-          hint={t.focusSessions ? `${Math.round(t.completionRate * 100)}% finished` : undefined}
-          delta={change(t.completed, p.completed)}
-          vs={vs}
-        />
-        <Tile label="Average session" value={t.focusSessions ? fmtDuration(t.avgSessionMs) : "—"} delta={change(t.avgSessionMs, p.avgSessionMs)} vs={vs} />
-        <Tile label="Distractions" value={`${t.distractions}`} delta={change(t.distractions, p.distractions)} lowerIsBetter vs={vs} />
-        <Tile label="Consistency" value={`${t.activeDays}/${t.elapsedDays}`} hint="days with a finished session" />
-        <Tile
-          label="Day streak"
-          value={`${data.streak.current}`}
-          hint={`best ${data.streak.best}${data.streak.current > 0 && !data.streak.todayDone ? " · finish one today to keep it" : ""}`}
-        />
-        <Tile label="Avg rating" value={t.avgRating ? ratingFace(t.avgRating) : "—"} hint={t.avgRating ? `${t.avgRating.toFixed(1)} / 4` : "from reflections"} />
+      <section className="card td-figures">
+        <div className="td-figs">
+          <Figure value={fmtDuration(t.focusMs)} label="focus time" delta={<Delta value={change(t.focusMs, p.focusMs)} vs={vs} />} />
+          <Figure value={fmtDuration(t.avgDailyFocusMs)} label="per day" delta={<Delta value={change(t.avgDailyFocusMs, p.avgDailyFocusMs)} vs={vs} />} />
+          <Figure value={t.completed} label="completed" delta={<Delta value={change(t.completed, p.completed)} vs={vs} />} />
+          <Figure
+            value={t.distractions}
+            label={t.distractions === 1 ? "distraction" : "distractions"}
+            delta={<Delta value={change(t.distractions, p.distractions)} vs={vs} lowerIsBetter />}
+          />
+        </div>
+        <div className="td-extras">
+          <div>
+            <div>
+              {extras.map((e) => (
+                <span key={e}>{e}</span>
+              ))}
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="card">
@@ -92,7 +107,7 @@ export function History() {
       <div className="two-col">
         <section className="card">
           <h3>Projects</h3>
-          <Bars rows={data.projects} empty="Add #project to a task to see where time goes." format={fmtDuration} label={(n) => (n ? `#${n}` : "No project")} />
+          <Projects rows={data.projects} />
         </section>
         <section className="card">
           <h3>Distractions</h3>
@@ -119,34 +134,25 @@ function periodLabel(kind: Kind, d: PeriodStats, offset: number): string {
   return `${f(from)} – ${f(to)}`;
 }
 
+function rangeLabel(d: PeriodStats): string {
+  const f = (t: number) => new Date(t).toLocaleDateString([], { day: "numeric", month: "short" });
+  return `${f(d.from)} – ${f(d.to - DAY_MS)}`;
+}
+
 /** Fractional change, or null when there's nothing to compare against. */
 function change(now: number, before: number): number | null {
   if (before <= 0) return null;
   return (now - before) / before;
 }
 
-export const ratingFace = (r: number) => (r < 1.75 ? "😫" : r < 2.5 ? "😐" : r < 3.25 ? "🙂" : "🔥");
-
-function Tile({ label, value, hint, delta, lowerIsBetter, vs }: { label: string; value: string; hint?: string; delta?: number | null; lowerIsBetter?: boolean; vs?: string }) {
-  let deltaEl = null;
-  if (delta !== undefined && delta !== null && Math.abs(delta) >= 0.01) {
-    const good = lowerIsBetter ? delta < 0 : delta > 0;
-    deltaEl = (
-      <span className={`delta ${good ? "good" : "bad"}`} title={vs}>
-        {delta > 0 ? "↑" : "↓"} {Math.round(Math.abs(delta) * 100)}%
-      </span>
-    );
-  }
+/** "↑ 22%" against the previous period; green when it moved the right way. */
+function Delta({ value, vs, lowerIsBetter }: { value: number | null; vs: string; lowerIsBetter?: boolean }) {
+  if (value === null || Math.abs(value) < 0.01) return null;
+  const good = lowerIsBetter ? value < 0 : value > 0;
   return (
-    <div className="stat">
-      <div className="stat-value">
-        {value} {deltaEl}
-      </div>
-      <div className="stat-label">
-        {label}
-        {hint && <span> · {hint}</span>}
-      </div>
-    </div>
+    <span className={`delta ${good ? "good" : "bad"}`} title={vs}>
+      {value > 0 ? "↑" : "↓"} {Math.round(Math.abs(value) * 100)}%
+    </span>
   );
 }
 

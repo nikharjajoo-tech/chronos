@@ -1,5 +1,6 @@
-/* Today tab. Reads the panel.css tokens, so it follows Glass and Retro and
-   light or dark; theme-specific touches are at the end. */
+/* Today tab, plus the figures card and project bars History reuses. Reads
+   the panel.css tokens, so it follows Glass and Retro and light or dark;
+   theme-specific touches are at the end. */
 
 /* ── header and goal ───────────────────────────────────────────────────── */
 .td-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

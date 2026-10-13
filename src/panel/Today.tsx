@@ -2,13 +2,12 @@
 // now, a few key numbers, the day's timeline, where the time went and the
 // session log (with distractions under the session they interrupted).
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api } from "../api";
-import { fmtClock, fmtDuration, fmtTime } from "../format";
+import { fmtClock, fmtDuration, fmtTime, ratingFace } from "../format";
 import { remainingOf, useSecondTick, useSnapshot } from "../hooks";
 import type { DistractionRow, Named, SessionRow, Snapshot, TodayStats } from "../types";
 import { DISTRACTION_CATEGORIES, PHASE_LABEL } from "../types";
-import { ratingFace } from "./History";
 import { projectColor } from "./planModel";
 import "./today.css";
 
@@ -175,10 +174,14 @@ function NowStrip({ snap, now }: { snap: Snapshot; now: number }) {
   );
 }
 
-function Figure({ value, label, tone }: { value: string | number; label: string; tone?: "good" }) {
+/** One headline number in a figures card; History adds its change. */
+export function Figure({ value, label, tone, delta }: { value: string | number; label: string; tone?: "good"; delta?: ReactNode }) {
   return (
     <div className={`td-fig ${tone ?? ""}`}>
-      <b>{value}</b>
+      <b>
+        {value}
+        {delta}
+      </b>
       <span>{label}</span>
     </div>
   );
@@ -234,7 +237,8 @@ function Timeline({ sessions, distractions, snap, now }: { sessions: SessionRow[
   );
 }
 
-function Projects({ rows }: { rows: Named[] }) {
+/** Focus per project, each in its own colour. */
+export function Projects({ rows }: { rows: Named[] }) {
   if (rows.length === 0) return <div className="empty">Add #project to a task to see where the time goes.</div>;
   const total = rows.reduce((a, r) => a + r.value, 0);
   const max = Math.max(...rows.map((r) => r.value));

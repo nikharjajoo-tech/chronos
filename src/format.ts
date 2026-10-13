@@ -17,6 +17,9 @@ export function fmtDuration(ms: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
+/** A face for an average session rating (1–4). */
+export const ratingFace = (r: number) => (r < 1.75 ? "😫" : r < 2.5 ? "😐" : r < 3.25 ? "🙂" : "🔥");
+
 export function fmtTime(epochMs: number): string {
   return new Date(epochMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

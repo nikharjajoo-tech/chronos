@@ -29,6 +29,13 @@ export function Insights() {
 
   return (
     <div className="insights">
+      <header className="hist-head">
+        <div className="td-title">
+          <h1>Insights</h1>
+          <span className="td-date">From your last 4 weeks of focus</span>
+        </div>
+      </header>
+
       <ScoreCard view={view} />
 
       {view.suggestion && (
@@ -121,7 +128,10 @@ function Parts({ score }: { score: Score }) {
     <ul className="parts">
       {score.parts.map((p) => (
         <li key={p.key} title={`${Math.round(p.points)} of ${Math.round(p.max)} points`}>
-          <span className="part-label">{p.label}</span>
+          <span className="part-name">
+            {p.label}
+            <span className="part-detail">{p.detail}</span>
+          </span>
           <span className="part-track">
             <i style={{ width: `${(p.points / p.max) * 100}%` }} />
           </span>
@@ -129,7 +139,6 @@ function Parts({ score }: { score: Score }) {
             {Math.round(p.points)}
             <small>/{Math.round(p.max)}</small>
           </span>
-          <span className="part-detail">{p.detail}</span>
         </li>
       ))}
     </ul>
