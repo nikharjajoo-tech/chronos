@@ -6,7 +6,7 @@ import { beforeIdAt, dropIndex, stepBefore } from "./useDragList";
 
 const task = (id: number, extra: Partial<TaskRow> = {}): TaskRow => ({
   id, title: `Task ${id}`, project: null, bucket: "today", position: id, estimateMs: null, done: false,
-  createdAt: 0, movedAt: 0, doneAt: null, spentMs: 0, leftover: false, ...extra,
+  createdAt: 0, movedAt: 0, doneAt: null, spentMs: 0, leftover: false, note: null, source: null, ...extra,
 });
 
 describe("drop maths", () => {

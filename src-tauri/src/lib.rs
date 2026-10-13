@@ -4,6 +4,7 @@ pub mod companion;
 pub mod db;
 pub mod engine;
 pub mod insights;
+pub mod mcp;
 pub mod report;
 pub mod settings;
 pub mod shell;

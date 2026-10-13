@@ -65,7 +65,7 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, board
   return (
     <li
       ref={ref}
-      className={`task-card${live ? " live" : ""}${t.project || t.leftover ? "" : " no-meta"}${dragging ? " dragging" : ""}${menu ? " menu-open" : ""}`}
+      className={`task-card${live ? " live" : ""}${t.project || t.leftover || t.source ? "" : " no-meta"}${t.note ? " has-note" : ""}${dragging ? " dragging" : ""}${menu ? " menu-open" : ""}`}
       data-drag-id={t.id}
       tabIndex={0}
       aria-label={`${t.title}${t.project ? `, #${t.project}` : ""}${est ? `, ${est.text}` : ""}${live ? ", live" : ""}`}
@@ -96,9 +96,14 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, board
             {t.title}
           </span>
         )}
-        {(inline || t.project || t.leftover) && (
+        {(inline || t.project || t.leftover || t.source === "claude") && (
           <div className="tc-meta">
             {inline && <span className="live-tag">Live</span>}
+            {t.source === "claude" && (
+              <span className="tc-claude" title="Added by Claude Code">
+                Claude
+              </span>
+            )}
             {t.project && (
               <span className="tc-project">
                 <i style={{ background: projectColor(t.project) }} />
@@ -108,6 +113,11 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, board
             {t.leftover && <span className="tc-from">{leftoverLabel(t.movedAt, now)}</span>}
             {inline && progress}
           </div>
+        )}
+        {t.note && (
+          <span className="tc-note-text" title={t.note}>
+            {t.note}
+          </span>
         )}
         {live && board && (
           <div className="tc-live">

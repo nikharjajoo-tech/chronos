@@ -120,6 +120,10 @@ html.dragging-task, html.dragging-task * { cursor: grabbing !important; }
 .tc-project i { flex: none; width: 7px; height: 7px; border-radius: 50%; }
 .tc-project span { overflow: hidden; text-overflow: ellipsis; }
 .tc-from { white-space: nowrap; }
+/* Added by Claude Code (chronos mcp): a small badge, and its note under the title. */
+.tc-claude { flex: none; font-size: 11px; font-weight: 600; line-height: 16px; padding: 0 6px; border-radius: 999px; color: #b04e2d; background: rgba(217, 119, 87, 0.15); }
+.tc-note-text { min-width: 0; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; }
+.cards .tc-note-text { grid-column: 2 / 4; }
 .tc-project + .tc-from { margin-left: -4px; }
 .tc-project + .tc-from::before { content: "· "; }
 .live-tag { font-size: 11px; font-weight: 600; line-height: 17px; padding: 0 7px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
@@ -317,6 +321,7 @@ html[data-theme="glass"] { --tile: rgba(255, 255, 255, 0.88); }
 .cards .tc-meta { grid-area: meta; flex-wrap: wrap; row-gap: 2px; min-width: 0; overflow: hidden; }
 .cards .tc-meta .tc-project { max-width: 100%; }
 .task-list.cards > .task-card.no-meta { grid-template-areas: "check title est"; }
+.task-list.cards > .task-card.no-meta.has-note { grid-template-areas: "check title est" "check note note"; }
 /* The live card: title, project, "Live · 18:39 left", then the progress
    bar with the time spent at its end. */
 .task-list.cards > .task-card.live { grid-template-areas: "check title title" "check meta meta" "check live live" "check prog est"; row-gap: 5px; }
@@ -394,4 +399,7 @@ html[data-theme="glass"] .tc-menu hr { border-top-width: 0.5px; }
 html[data-theme="glass"] .quick-add { background: color-mix(in srgb, var(--card-solid) 80%, transparent); }
 @media (prefers-color-scheme: dark) {
   html[data-theme="glass"] .quick-add { background: var(--card); }
+}
+@media (prefers-color-scheme: dark) {
+  .tc-claude { color: #f0a080; background: rgba(217, 119, 87, 0.2); }
 }

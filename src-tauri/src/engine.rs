@@ -693,6 +693,16 @@ impl Engine {
     /// a deleted one loses this block's time, one that was ticked off or moved
     /// out of Today is credited, and either way the next Today task takes over.
     /// An edited title or #tag shows on the clock straight away.
+    /// Another process (Claude Code's `chronos mcp`) changed the tasks:
+    /// re-check the live one. True when the panel should refetch.
+    pub fn tasks_changed_elsewhere(&mut self, now: i64) -> bool {
+        if !self.db.changed_elsewhere() {
+            return false;
+        }
+        self.reconcile_live(now);
+        true
+    }
+
     pub fn reconcile_live(&mut self, now: i64) {
         let Some(id) = self.timer.task_id else { return };
         match self.db.task(id, day_bounds(now).0) {

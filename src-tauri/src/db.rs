@@ -78,6 +78,12 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE sessions ADD COLUMN task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL;
     CREATE INDEX idx_sessions_task ON sessions(task_id);
     "#,
+    // 4 — a note on a task, and who added it (NULL = you; "claude" = Claude Code)
+    r#"
+    ALTER TABLE tasks ADD COLUMN note   TEXT;
+    ALTER TABLE tasks ADD COLUMN source TEXT;
+    CREATE INDEX idx_tasks_source ON tasks(source) WHERE source IS NOT NULL;
+    "#,
 ];
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -143,6 +149,9 @@ pub struct DayStats {
 
 pub struct Db {
     conn: Connection,
+    /// `PRAGMA data_version` when last checked; it moves when another
+    /// process (Claude Code's `chronos mcp`) commits.
+    seen_version: std::cell::Cell<i64>,
 }
 
 impl Db {
@@ -156,9 +165,19 @@ impl Db {
 
     fn init(conn: Connection) -> Result<Db> {
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")?;
-        let db = Db { conn };
+        // The app and `chronos mcp` can write at the same moment; wait, don't fail.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        let db = Db { conn, seen_version: std::cell::Cell::new(-1) };
         db.migrate()?;
         Ok(db)
+    }
+
+    /// True when another process has written since the last call.
+    pub fn changed_elsewhere(&self) -> bool {
+        let Ok(v) = self.conn.query_row("PRAGMA data_version", [], |r| r.get::<_, i64>(0)) else { return false };
+        let changed = self.seen_version.get() >= 0 && v != self.seen_version.get();
+        self.seen_version.set(v);
+        changed
     }
 
     fn migrate(&self) -> Result<()> {
@@ -346,7 +365,7 @@ impl Db {
 /// Columns read by `task_row`. Spent time is summed from `session_tasks`;
 /// the running block's share is added by the engine.
 const TASK_COLS: &str = "t.id, t.title, t.project, t.bucket, t.position, t.estimate_ms, t.status, t.created_at,
-     t.moved_at, t.done_at, COALESCE((SELECT SUM(active_ms) FROM session_tasks WHERE task_id = t.id), 0)";
+     t.moved_at, t.done_at, COALESCE((SELECT SUM(active_ms) FROM session_tasks WHERE task_id = t.id), 0), t.note, t.source";
 
 fn task_row(r: &rusqlite::Row, today_start: i64) -> rusqlite::Result<TaskRow> {
     let bucket = Bucket::parse(&r.get::<_, String>(3)?).unwrap_or(Bucket::Backlog);
@@ -365,6 +384,8 @@ fn task_row(r: &rusqlite::Row, today_start: i64) -> rusqlite::Result<TaskRow> {
         done_at: r.get(9)?,
         spent_ms: r.get(10)?,
         leftover: tasks::is_leftover(bucket, done, moved_at, today_start),
+        note: r.get(11)?,
+        source: r.get(12)?,
     })
 }
 
@@ -372,13 +393,18 @@ fn task_row(r: &rusqlite::Row, today_start: i64) -> rusqlite::Result<TaskRow> {
 impl Db {
     /// Adds a task at the top or bottom of `bucket`. Returns its id.
     pub fn insert_task(&self, t: &ParsedTask, bucket: Bucket, top: bool, now: i64) -> Result<i64> {
+        self.insert_task_from(t, bucket, top, now, None, None)
+    }
+
+    /// `insert_task` with a note and who added it (`Some("claude")` for Claude Code).
+    pub fn insert_task_from(&self, t: &ParsedTask, bucket: Bucket, top: bool, now: i64, note: Option<&str>, source: Option<&str>) -> Result<i64> {
         let tx = self.conn.unchecked_transaction()?;
         let first = if top { self.first_task_id(bucket, None)? } else { None };
         let position = self.place(bucket, first, None)?;
         self.conn.execute(
-            "INSERT INTO tasks (title, project, bucket, position, estimate_ms, created_at, moved_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-            params![t.title, t.project, bucket.as_str(), position, t.estimate_ms, now],
+            "INSERT INTO tasks (title, project, bucket, position, estimate_ms, created_at, moved_at, note, source)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8)",
+            params![t.title, t.project, bucket.as_str(), position, t.estimate_ms, now, note, source],
         )?;
         let id = self.conn.last_insert_rowid();
         tx.commit()?;
@@ -389,6 +415,17 @@ impl Db {
         self.conn
             .query_row(&format!("SELECT {TASK_COLS} FROM tasks t WHERE t.id = ?1"), [id], |r| task_row(r, today_start))
             .optional()
+    }
+
+    /// Tasks added by `source`: open ones, plus those done since `done_since`.
+    pub fn tasks_from(&self, source: &str, done_since: i64, today_start: i64) -> Result<Vec<TaskRow>> {
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT {TASK_COLS} FROM tasks t
+             WHERE t.source = ?1 AND (t.status = 'open' OR t.done_at >= ?2)
+             ORDER BY t.status DESC, t.created_at, t.id"
+        ))?;
+        let rows = stmt.query_map(params![source, done_since], |r| task_row(r, today_start))?;
+        rows.collect()
     }
 
     /// Every open task, plus tasks done since `done_since`, in bucket order.
@@ -476,8 +513,8 @@ impl Db {
     /// credit went with the delete.
     pub fn restore_task(&self, t: &TaskRow) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO tasks (id, title, project, bucket, position, estimate_ms, status, created_at, moved_at, done_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO tasks (id, title, project, bucket, position, estimate_ms, status, created_at, moved_at, done_at, note, source)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 t.id,
                 t.title,
@@ -488,7 +525,9 @@ impl Db {
                 if t.done { "done" } else { "open" },
                 t.created_at,
                 t.moved_at,
-                t.done_at
+                t.done_at,
+                t.note,
+                t.source
             ],
         )?;
         Ok(())

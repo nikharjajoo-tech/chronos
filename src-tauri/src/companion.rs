@@ -118,6 +118,10 @@ pub fn spawn_watchdog(app: AppHandle) {
             if n % 2 == 0 {
                 auto_hide_check(&app, &settings);
             }
+            // To-dos added or ticked off by Claude Code (`chronos mcp`).
+            if n % 4 == 1 && shell::with_engine(&app, |e| e.tasks_changed_elsewhere(now_ms())) {
+                shell::tasks_changed(&app);
+            }
             // Morning prompt: check once a minute (and soon after launch).
             if n % 120 == 4 {
                 maybe_open_morning(&app);

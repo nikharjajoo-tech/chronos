@@ -72,6 +72,10 @@ export interface TaskRow {
   spentMs: number;
   /** Open Today task carried over from an earlier day. */
   leftover: boolean;
+  /** Details, e.g. the command Claude Code wants you to run. */
+  note: string | null;
+  /** Who added it: null = you, "claude" = Claude Code. */
+  source: string | null;
 }
 
 /** The morning sheet. Everything open in Today starts ticked. */

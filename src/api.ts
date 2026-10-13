@@ -191,13 +191,14 @@ function mockBackend(): Backend {
   const seed = (bucket: Bucket, title: string, project: string | null, est: number | null, spent = 0, extra: Partial<TaskRow> = {}) =>
     tasks.push({
       id: nextId, title, project, bucket, position: nextId++, estimateMs: est && est * MINUTE, done: false,
-      createdAt: t0, movedAt: t0, doneAt: null, spentMs: spent * MINUTE, leftover: false, ...extra,
+      createdAt: t0, movedAt: t0, doneAt: null, spentMs: spent * MINUTE, leftover: false, note: null, source: null, ...extra,
     });
   if (q.get("tasks") !== "0") {
     seed("today", "Prep slides for capstone demo", "course", 60, 38);
     seed("today", "Tailor resume for AI PM role", "job-search", 45);
     seed("today", "Chronos: tasks table migration", "chronos", 90);
     seed("today", "Reply to recruiter emails", "job-search", 20, 0, { leftover: true, movedAt: t0 - 86_400_000 });
+    seed("today", "Log in to the GitHub CLI", "chronos", 5, 0, { source: "claude", note: "Run `gh auth login` in ~/orca/projects/Chronos so I can open the pull request." });
     seed("today", "Morning walk", "life", 30, 32, { done: true, doneAt: t0 - 3 * 3_600_000 });
     seed("week", "Mock interview practice", "job-search", 60);
     seed("week", "Write LinkedIn post about Chronos", "brand", 40);

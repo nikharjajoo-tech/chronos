@@ -55,6 +55,10 @@ pub struct TaskRow {
     pub spent_ms: i64,
     /// Open Today task carried over from an earlier day.
     pub leftover: bool,
+    /// Details, e.g. the command Claude Code wants you to run.
+    pub note: Option<String>,
+    /// Who added it: None = you, "claude" = Claude Code.
+    pub source: Option<String>,
 }
 
 /// The result of parsing what the user typed.
