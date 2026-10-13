@@ -173,6 +173,17 @@ export function SettingsView() {
       </section>
 
       <section className="card">
+        <h3>Appearance</h3>
+        <Row label="Panel and board">
+          <div className="chips">
+            <button className={settings.theme === "glass" ? "on" : ""} onClick={() => save({ theme: "glass" }, true)}>Glass</button>
+            <button className={settings.theme === "retro" ? "on" : ""} onClick={() => save({ theme: "retro" }, true)}>Retro</button>
+          </div>
+        </Row>
+        <p className="note">Light or dark follows your Mac. The clock has its own style below.</p>
+      </section>
+
+      <section className="card">
         <h3>Widget</h3>
         <div className="widget-picker">
           {WIDGETS.map((w) => (

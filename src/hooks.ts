@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import type { Settings, Snapshot } from "./types";
+import type { Settings, Snapshot, Theme } from "./types";
 
 export function useSnapshot(): Snapshot | null {
   const [snap, setSnap] = useState<Snapshot | null>(null);
@@ -27,6 +27,31 @@ export function useSettings(): [Settings | null, (s: Settings) => void] {
     return off;
   }, []);
   return [settings, setSettings];
+}
+
+const THEME_KEY = "chronos.theme";
+
+/** The theme last seen, so a window paints in it before settings arrive. */
+export function cachedTheme(): Theme {
+  try {
+    return localStorage.getItem(THEME_KEY) === "retro" ? "retro" : "glass";
+  } catch {
+    return "glass";
+  }
+}
+
+/** Puts the panel theme on <html data-theme> and remembers it. */
+export function useTheme(settings: Settings | null) {
+  const theme = settings?.theme;
+  useEffect(() => {
+    if (!theme) return;
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // Private storage off: the next window just starts in Glass.
+    }
+  }, [theme]);
 }
 
 /** Remaining ms, derived from the absolute end time, never counted down locally. */

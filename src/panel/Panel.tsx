@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { useSettings, useTheme } from "../hooks";
 import { History } from "./History";
 import { Insights } from "./Insights";
 import { SettingsView } from "./SettingsView";
@@ -18,6 +19,8 @@ const tabFromHash = (): Tab => asTab(location.hash.replace("#", ""));
 
 export function Panel() {
   const [tab, setTab] = useState<Tab>(tabFromHash);
+  const [settings] = useSettings();
+  useTheme(settings);
 
   useEffect(() => api.onTab((t) => setTab(asTab(t))), []);
   useEffect(() => {
@@ -33,7 +36,7 @@ export function Panel() {
 
   return (
     <div className="panel">
-      <header className="panel-head">
+      <header className="panel-head" data-tauri-drag-region>
         <div className="logo">
           <span className="logo-mark" aria-hidden />
           CHRONOS

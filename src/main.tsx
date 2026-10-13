@@ -1,12 +1,15 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { api, isTauri } from "./api";
+import { cachedTheme } from "./hooks";
 import { Clock } from "./clock/Clock";
 import { Panel } from "./panel/Panel";
 import { Quick } from "./quick/Quick";
 
 const view = api.view();
 document.documentElement.classList.add(`${view}-window`);
+if (isTauri) document.documentElement.classList.add("tauri");
+if (view === "panel") document.documentElement.dataset.theme = cachedTheme();
 const previewParams = new URLSearchParams(location.search);
 if (!isTauri && view !== "panel") {
   // Browser preview: put the transparent clock on a desk-coloured backdrop

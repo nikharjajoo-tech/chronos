@@ -141,6 +141,7 @@ function mockBackend(): Backend {
     autoStartBreaks: false, autoStartFocus: false, alwaysOnTop: true, allWorkspaces: true,
     opacity: 1, captureProtected: false, hideShortcut: "CommandOrControl+Shift+H",
     widget: (q.get("widget") as Settings["widget"]) ?? "large", style: (q.get("style") as Settings["style"]) ?? "retro",
+    theme: (q.get("theme") as Settings["theme"]) ?? "glass",
     scale: 1, launchAtLogin: true, showInDock: false,
     awayMin: 5, autoHide: true, autoHideApps: ["CptHost", "screencaptureui", "obs"], dnd: false,
     menuBarTimer: "off", distractionShortcut: "Control+Alt+D", reflection: true, notifications: true, companion: true,

@@ -151,12 +151,27 @@ pub fn open_panel(app: &AppHandle, tab: Option<&str>) {
         return;
     }
     let url = format!("index.html#{}", tab.unwrap_or("today"));
-    let built = WebviewWindowBuilder::new(app, PANEL, WebviewUrl::App(url.into()))
+    let builder = WebviewWindowBuilder::new(app, PANEL, WebviewUrl::App(url.into()))
         .title("Chronos")
         .inner_size(480.0, 680.0)
         .min_inner_size(420.0, 520.0)
-        .resizable(true)
-        .build();
+        .resizable(true);
+    // A frosted macOS window: the system blur shows through the Glass theme
+    // (Retro paints an opaque background over it), and the traffic lights
+    // sit inside the page's header.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .transparent(true)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .traffic_light_position(LogicalPosition::new(16.0, 22.0))
+        .effects(
+            tauri::window::EffectsBuilder::new()
+                .effect(tauri::window::Effect::Sidebar)
+                .state(tauri::window::EffectState::FollowsWindowActiveState)
+                .build(),
+        );
+    let built = builder.build();
     if let Ok(w) = built {
         let _ = w.set_focus();
     }

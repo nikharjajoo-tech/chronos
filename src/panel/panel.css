@@ -1,6 +1,12 @@
-/* Stats & settings window. Same retro family as the clock, tuned for reading. */
+/* Stats & settings window, in two themes: Glass (default; frosted macOS
+   window, neutral greys, orange only as the accent) and Retro (the clock's
+   cream-and-orange family). Both follow the Mac's light or dark setting.
+   Everything below reads the tokens; theme-specific shapes are at the end. */
 
 :root {
+  --page: var(--bg);
+  --accent-text: var(--accent);
+  --card-solid: var(--card);
   --bg: #f3ebda;
   --bg-2: #ebe0c9;
   --card: #fbf6ea;
@@ -39,7 +45,7 @@
 html.panel-window,
 html.panel-window body {
   margin: 0;
-  background: var(--bg);
+  background: var(--page);
   color: var(--ink);
   font: 14px/1.45 "Avenir Next", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -296,7 +302,7 @@ input[type="range"] { accent-color: var(--accent); width: 150px; }
 .card h3 + .toggle { border-top: 0; }
 
 .shortcut { min-width: 92px; font-family: "SF Mono", Menlo, monospace; letter-spacing: 1px; }
-.shortcut.recording { border-color: var(--accent); color: var(--accent); animation: live 1.2s ease-in-out infinite; }
+.shortcut.recording { border-color: var(--accent); color: var(--accent-text); animation: live 1.2s ease-in-out infinite; }
 .path {
   font: 11.5px/1.3 "SF Mono", Menlo, monospace;
   color: var(--ink-2);
@@ -399,7 +405,7 @@ input[type="range"] { accent-color: var(--accent); width: 150px; }
   display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 12px; font-weight: 700;
   padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, var(--card)); color: var(--ink);
 }
-.log-project { font-size: 11px; font-weight: 700; color: var(--accent); margin-left: 5px; }
+.log-project { font-size: 11px; font-weight: 700; color: var(--accent-text); margin-left: 5px; }
 .log-rating { margin-left: 4px; font-size: 12px; }
 .dlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .dlist span { font-size: 11.5px; padding: 3px 8px; border-radius: 999px; background: var(--bg-2); color: var(--ink-2); }
@@ -468,6 +474,139 @@ input.text {
   border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; width: 210px;
 }
 input.text:focus, .app-add input:focus, select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: 0; }
-button.link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+button.link { border: 0; background: none; padding: 0; color: var(--accent-text); font: inherit; font-weight: 600; cursor: pointer; }
 button.link:hover { text-decoration: underline; }
 .error-inline { color: var(--warn); }
+
+/* ── Glass theme ─────────────────────────────────────────────────────── */
+html[data-theme="glass"] {
+  --page: transparent;
+  --bg: rgba(255, 255, 255, 0.72);
+  --bg-2: rgba(118, 118, 128, 0.12);
+  --card: rgba(255, 255, 255, 0.62);
+  --card-solid: #ffffff;
+  --line: rgba(0, 0, 0, 0.1);
+  --ink: #1d1d1f;
+  --ink-2: #48484a;
+  --ink-3: #6e6e73;
+  --accent: #ff9500;
+  --accent-ink: #1d1d1f;
+  /* Orange that is readable as text on light glass. */
+  --accent-text: #c93400;
+  --good: #248a3d;
+  --warn: #d70015;
+  --focus: #ff9500;
+  --break: #30b0c7;
+  --long: #af52de;
+  --crt: rgba(118, 118, 128, 0.12);
+  --crt-glow: #1d1d1f;
+  --wash: rgba(246, 246, 248, 0.72);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="glass"] {
+    --bg: rgba(255, 255, 255, 0.08);
+    --bg-2: rgba(118, 118, 128, 0.24);
+    --card: rgba(255, 255, 255, 0.06);
+    --card-solid: #636366;
+    --line: rgba(255, 255, 255, 0.12);
+    --ink: #f5f5f7;
+    --ink-2: #d1d1d6;
+    --ink-3: #98989d;
+    --accent: #ff9f0a;
+    --accent-text: #ffb340;
+    --good: #30d158;
+    --warn: #ff6961;
+    --focus: #ff9f0a;
+    --break: #40c8e0;
+    --long: #bf5af2;
+    --crt-glow: #f5f5f7;
+    --wash: rgba(30, 30, 32, 0.72);
+    color-scheme: dark;
+  }
+}
+
+html[data-theme="glass"].panel-window,
+html[data-theme="glass"].panel-window body {
+  font: 13px/1.45 -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+}
+/* In the app the window itself is frosted (macOS vibrancy). The browser
+   preview has no vibrancy, so it fakes one over a desktop-like backdrop. */
+html[data-theme="glass"].panel-window:not(.tauri) {
+  background:
+    radial-gradient(circle at 18% 12%, #f6c9a4 0, transparent 46%),
+    radial-gradient(circle at 85% 35%, #a9c7f5 0, transparent 52%),
+    #e7e4ee;
+}
+html[data-theme="glass"]:not(.tauri) .panel {
+  background: var(--wash);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="glass"].panel-window:not(.tauri) {
+    background:
+      radial-gradient(circle at 20% 15%, #5a3a2a 0, transparent 45%),
+      radial-gradient(circle at 85% 70%, #23395f 0, transparent 55%),
+      #121318;
+  }
+}
+
+/* The traffic lights sit inside the header (overlay title bar). */
+html.tauri .panel-head { min-height: 52px; box-sizing: border-box; padding-left: 84px; }
+
+html[data-theme="glass"] .panel-head {
+  justify-content: center;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: var(--wash);
+  border-bottom: 0.5px solid var(--line);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+html.tauri[data-theme="glass"] .panel-head { padding-right: 84px; }
+html[data-theme="glass"] .logo { display: none; }
+html[data-theme="glass"] .tabs { gap: 0; padding: 2px; border-radius: 8px; background: var(--bg-2); }
+html[data-theme="glass"] .tabs button { font-size: 12px; font-weight: 500; color: var(--ink); padding: 5px 12px; border-radius: 6px; }
+html[data-theme="glass"] .tabs button.on { background: var(--card-solid); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 0 0 0.5px rgba(0, 0, 0, 0.06); }
+
+html[data-theme="glass"] .card,
+html[data-theme="glass"] .stat {
+  border-width: 0.5px;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+html[data-theme="glass"] .card h3 { font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+html[data-theme="glass"] .eyebrow { letter-spacing: 0.3px; font-weight: 600; }
+html[data-theme="glass"] .hero { background: var(--card); }
+
+html[data-theme="glass"] .now-badge,
+html[data-theme="glass"] .now-badge.phase-short_break,
+html[data-theme="glass"] .now-badge.phase-long_break { --glow: var(--ink); background: var(--bg-2); box-shadow: none; }
+html[data-theme="glass"] .now-badge.running .dot { background: var(--accent); opacity: 1; box-shadow: none; }
+html[data-theme="glass"] .now-time { font: 600 22px/1.15 -apple-system, "SF Pro Display", system-ui, sans-serif; font-variant-numeric: tabular-nums; text-shadow: none; }
+html[data-theme="glass"] .now-phase { letter-spacing: 0.3px; }
+
+html[data-theme="glass"] .goalbar i { box-shadow: none; }
+html[data-theme="glass"] .goalbar i.on { box-shadow: none; }
+
+html[data-theme="glass"] .chips button,
+html[data-theme="glass"] .ghost,
+html[data-theme="glass"] .stepper button,
+html[data-theme="glass"] .shortcut,
+html[data-theme="glass"] .segmented button,
+html[data-theme="glass"] .widget-picker button,
+html[data-theme="glass"] .period-nav button,
+html[data-theme="glass"] .minutes input,
+html[data-theme="glass"] .app-chip,
+html[data-theme="glass"] .app-add input,
+html[data-theme="glass"] input.text,
+html[data-theme="glass"] select,
+html[data-theme="glass"] .path { border-width: 0.5px; border-radius: 7px; }
+html[data-theme="glass"] .chips button { font-weight: 500; }
+html[data-theme="glass"] .segmented button.on,
+html[data-theme="glass"] .widget-picker button.on { background: var(--card-solid); box-shadow: inset 0 0 0 1.5px var(--accent); border-color: transparent; }
+html[data-theme="glass"] .segmented.small button.on { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14); }
+html[data-theme="glass"] .toggle i { background: rgba(120, 120, 128, 0.32); }
+html[data-theme="glass"] .toggle input:checked + i { background: var(--accent); }
+html[data-theme="glass"] .streak-chip { background: var(--bg-2); }

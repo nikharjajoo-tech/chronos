@@ -4,6 +4,7 @@ export type Phase = "focus" | "short_break" | "long_break";
 export type RunState = "idle" | "running" | "paused";
 export type Widget = "pill" | "small" | "medium" | "large";
 export type ClockStyle = "retro" | "minimal";
+export type Theme = "glass" | "retro";
 
 export interface Snapshot {
   phase: Phase;
@@ -100,6 +101,8 @@ export interface Settings {
   hideShortcut: string;
   widget: Widget;
   style: ClockStyle;
+  /** Panel, board and their pop-ups. Light or dark follows macOS. */
+  theme: Theme;
   scale: number;
   launchAtLogin: boolean;
   showInDock: boolean;

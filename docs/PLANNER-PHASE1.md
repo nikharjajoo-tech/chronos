@@ -629,11 +629,13 @@ Each step ends with passing tests and a working app. Commit after each.
 | 2 | Live task, crediting, new actions, snapshot fields | `timer.rs`, `engine.rs` | L |
 | 3 | Commands, events, `api.ts` + mock, `types.ts` | `commands.rs`, `lib.rs`, `shell.rs`, `src/api.ts` | M |
 | 4 | Clock: task line, Done key, D/N keys, menu items | `parts.tsx`, `Clock.tsx`, `shell.rs` | S |
+| 4b | Themes: `theme` setting (Glass default, Retro), frosted panel window, Glass tokens | `settings.rs`, `shell.rs`, `panel.css`, `hooks.ts` | M |
 | 5 | Plan tab (panel layout), quick add, cards, drag | `src/panel/*` | L |
 | 6 | Board layout + toggle + window resizing | `PlanColumns.tsx`, `Panel.tsx`, `shell.rs` | M |
 | 7 | ⌃⌥T popup | `companion.rs`, `src/quick/AddTask.tsx`, `settings.rs` | M |
 | 8 | Morning prompt + Planning settings card | `companion.rs`, `Morning.tsx`, `SettingsView.tsx` | M |
-| 9 | Docs: README features/shortcuts, `DESIGN.md` schema section | docs | S |
+| 9 | Glass clock style, and Glass versions of the clock's pop-ups | `src/clock/*`, `src/quick/*`, `settings.rs` | M |
+| 10 | Docs: README features/shortcuts, `DESIGN.md` schema section | docs | S |
 
 ---
 
@@ -644,3 +646,29 @@ Each step ends with passing tests and a working app. Commit after each.
 - **A task ticked off without a timer has no tracked time.** It shows
   *"no time tracked"*, not "on time". Logging time by hand comes in Phase 2.
 - **`#project` moves into the clock's tooltip** to make room for `38/60m`.
+
+---
+
+## 14. Themes *(agreed 2026-10-13)*
+
+The orange-heavy look was overwhelming on the larger planner screens, so the
+panel, board and their pop-ups get a second theme. Mockups: the "Glass" row of
+the planner canvas.
+
+| | Glass (default) | Retro |
+|---|---|---|
+| Where | panel tabs, board, ⌃⌥T popup, morning sheet | the same, chosen in Settings → Appearance |
+| Window | frosted macOS window (`Effect::Sidebar` vibrancy, overlay title bar with the traffic lights inside the header) | the same window, painted opaque in cream |
+| Colour | neutral greys and white; orange (`#FF9500`, dark `#FF9F0A`) only for the live task, progress, the one main button and ticked checks | today's cream and orange |
+| Orange text | `#C93400` light / `#FFB340` dark (readable); buttons put dark text on orange | as today |
+| Type | system font (SF Pro), 13px base | Avenir Next, as today |
+| Light/dark | follows macOS | follows macOS |
+
+- `settings.theme`: `"glass" | "retro"`, default `"glass"`, so existing
+  installs switch to Glass and can switch back.
+- The clock keeps its own `style` (Retro default, Minimal); **Glass becomes a
+  third clock style** in step 9. The clock's distraction and reflection
+  pop-ups follow the clock's style, not the panel theme.
+- macOS 13 has no Liquid Glass (macOS 26 only); the system vibrancy blur is
+  what shows through. The browser preview fakes it with `backdrop-filter`
+  over a desktop-like backdrop.

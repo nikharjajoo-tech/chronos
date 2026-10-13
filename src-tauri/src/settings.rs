@@ -34,6 +34,8 @@ pub const DEFAULT_AUTO_HIDE_APPS: &[&str] = &["CptHost", "screencaptureui", "obs
 pub const MENU_BAR_TIMER: &[&str] = &["off", "hidden", "always"];
 
 pub const STYLES: &[(&str, &str)] = &[("retro", "Retro"), ("minimal", "Minimal")];
+/// Look of the panel, board and their pop-ups. Light or dark follows macOS.
+pub const THEMES: &[(&str, &str)] = &[("glass", "Glass"), ("retro", "Retro")];
 pub const SCALE_RANGE: (f64, f64) = (0.6, 2.0);
 
 pub fn widget_base_size(widget: &str) -> (f64, f64) {
@@ -64,8 +66,10 @@ pub struct Settings {
     pub hide_shortcut: String,
     /// "pill" | "small" | "medium" | "large"
     pub widget: String,
-    /// "retro" | "minimal"
+    /// Clock style: "retro" | "minimal"
     pub style: String,
+    /// Panel and board theme: "glass" | "retro"
+    pub theme: String,
     /// Multiplier on the widget's base size.
     pub scale: f64,
 
@@ -123,6 +127,7 @@ impl Default for Settings {
             hide_shortcut: "CommandOrControl+Shift+H".into(),
             widget: "large".into(),
             style: "retro".into(),
+            theme: "glass".into(),
             scale: 1.0,
             launch_at_login: true,
             show_in_dock: false,
@@ -173,6 +178,9 @@ impl Settings {
         }
         if !STYLES.iter().any(|s| s.0 == self.style) {
             self.style = "retro".into();
+        }
+        if !THEMES.iter().any(|t| t.0 == self.theme) {
+            self.theme = "glass".into();
         }
         self.scale = if self.scale.is_finite() { self.scale.clamp(SCALE_RANGE.0, SCALE_RANGE.1) } else { 1.0 };
         if self.hide_shortcut.trim().is_empty() {
@@ -239,12 +247,14 @@ mod tests {
             volume: f64::NAN,
             widget: "huge".into(),
             style: "neon".into(),
+            theme: "paper".into(),
             scale: 9.0,
             ..Default::default()
         }
         .sanitized();
         assert_eq!(s.widget, "large");
         assert_eq!(s.style, "retro");
+        assert_eq!(s.theme, "glass");
         assert_eq!(s.scale, SCALE_RANGE.1);
         let s2 = Settings {
             auto_hide_apps: vec![" Keynote ".into(), "keynote".into(), "".into()],
