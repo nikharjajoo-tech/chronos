@@ -1,6 +1,7 @@
-// Rasterises Tock's original icons with no image dependencies.
-//   node scripts/make-icons.mjs        → src-tauri/icons/tray.png, app-icon.png
-//   npx tauri icon app-icon.png        → regenerates the platform icon set
+// Rasterises the menu-bar icon with no image dependencies. The app icon itself is
+// drawn in app-icon.svg.
+//   node scripts/make-icons.mjs        → src-tauri/icons/tray.png
+//   npx tauri icon app-icon.svg        → regenerates the platform icon set
 import { writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 
@@ -55,12 +56,6 @@ const capsule = (ax, ay, bx, by, w) => (x, y) => {
   const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
   return (x - ax - t * dx) ** 2 + (y - ay - t * dy) ** 2 <= (w / 2) ** 2;
 };
-const rrect = (x0, y0, x1, y1, r) => (x, y) => {
-  const cx = Math.max(x0 + r, Math.min(x, x1 - r));
-  const cy = Math.max(y0 + r, Math.min(y, y1 - r));
-  return x >= x0 && x <= x1 && y >= y0 && y <= y1 && (x - cx) ** 2 + (y - cy) ** 2 <= r * r;
-};
-
 function render(size, layers, ss = 4) {
   const out = Buffer.alloc(size * size * 4);
   for (let py = 0; py < size; py++) {
@@ -93,59 +88,18 @@ function render(size, layers, ss = 4) {
   return out;
 }
 
-const hex = (h, a = 1) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16), a];
-const mix = (c0, c1, t) => c0.map((v, i) => v + (c1[i] - v) * t);
-
-// A bell cap: a small disc with the clock body (plus a gap) cut away.
-const bell = (cx, cy) => (x, y) => circle(cx, cy, 0.14)(x, y) && !circle(0.5, 0.55, 0.44)(x, y);
-
-// Tray: monochrome template glyph, a little alarm clock with two bells.
+// Tray: monochrome template glyph matching the app icon: a dial with the focus arc
+// running from 12 o'clock to about 8, a faint track for the rest, and one hand.
 const ink = [0, 0, 0, 1];
+const at = (r, a) => [0.5 + Math.sin(a) * r, 0.5 - Math.cos(a) * r]; // 0 at 12 o'clock, clockwise
+const end = (235 / 180) * Math.PI;
 const tray = [
-  [ring(0.5, 0.55, 0.29, 0.38), ink],
-  [arc(0.5, 0.55, 0, 0.22, 0, Math.PI * 1.5), [0, 0, 0, 0.55]],
-  [capsule(0.5, 0.55, 0.5, 0.36, 0.075), ink],
-  [capsule(0.5, 0.55, 0.64, 0.55, 0.075), ink],
-  [bell(0.24, 0.2), ink],
-  [bell(0.76, 0.2), ink],
-  [capsule(0.3, 0.88, 0.24, 0.96, 0.08), ink],
-  [capsule(0.7, 0.88, 0.76, 0.96, 0.08), ink],
+  [ring(0.5, 0.5, 0.31, 0.44), [0, 0, 0, 0.3]],
+  [arc(0.5, 0.5, 0.31, 0.44, 0, end), ink],
+  [circle(...at(0.375, 0), 0.065), ink],
+  [circle(...at(0.375, end), 0.065), ink],
+  [capsule(0.5, 0.5, ...at(0.23, end), 0.08), ink],
+  [circle(0.5, 0.5, 0.058), ink],
 ];
 writeFileSync("src-tauri/icons/tray.png", png(44, render(44, tray, 6)));
-
-// App icon: putty casing, recessed amber dial, burnt-orange accents.
-const putty = (x, y) => mix(hex("#f3e8cf"), hex("#cdb68c"), y);
-const bezel = (x, y) => mix(hex("#5a3a24"), hex("#1d120b"), y);
-const face = (x, y) => {
-  const d = Math.hypot(x - 0.5, y - 0.53) / 0.3;
-  return mix(hex("#3a2716"), hex("#140d08"), Math.min(1, d));
-};
-const amber = hex("#ffb347");
-const ticks = [];
-for (let i = 0; i < 12; i++) {
-  const a = (i / 12) * Math.PI * 2;
-  const r0 = i % 3 === 0 ? 0.235 : 0.255, r1 = 0.28;
-  ticks.push([
-    capsule(0.5 + Math.sin(a) * r0, 0.53 - Math.cos(a) * r0, 0.5 + Math.sin(a) * r1, 0.53 - Math.cos(a) * r1, i % 3 === 0 ? 0.022 : 0.014),
-    i % 3 === 0 ? amber : hex("#ffb347", 0.55),
-  ]);
-}
-const app = [
-  [rrect(0.2, 0.86, 0.32, 0.93, 0.03), hex("#2a1a10")],
-  [rrect(0.68, 0.86, 0.8, 0.93, 0.03), hex("#2a1a10")],
-  [rrect(0.08, 0.1, 0.92, 0.9, 0.2), hex("#7a5232")],
-  [rrect(0.08, 0.09, 0.92, 0.88, 0.2), putty],
-  [(x, y) => y < 0.2 && rrect(0.08, 0.09, 0.92, 0.88, 0.2)(x, y), hex("#d8692a")],
-  [circle(0.2, 0.145, 0.022), hex("#fff2c4")],
-  [circle(0.27, 0.145, 0.022), hex("#ffb347")],
-  [circle(0.5, 0.53, 0.34), bezel],
-  [ring(0.5, 0.53, 0.3, 0.315), hex("#c99a5b")],
-  [circle(0.5, 0.53, 0.3), face],
-  [arc(0.5, 0.53, 0.205, 0.225, 0, Math.PI * 1.45), hex("#ff8a2a")],
-  ...ticks,
-  [capsule(0.5, 0.53, 0.5, 0.34, 0.03), hex("#fff2c4")],
-  [capsule(0.5, 0.53, 0.63, 0.6, 0.03), hex("#fff2c4")],
-  [circle(0.5, 0.53, 0.03), hex("#d8692a")],
-];
-writeFileSync("app-icon.png", png(1024, render(1024, app, 3)));
-console.log("wrote src-tauri/icons/tray.png and app-icon.png");
+console.log("wrote src-tauri/icons/tray.png");
