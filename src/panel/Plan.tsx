@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { fmtClock, fmtDuration } from "../format";
 import { remainingOf, useSecondTick, useSettings, useSnapshot } from "../hooks";
-import type { Bucket, ParsedTask, PlanMode, Snapshot, TaskRow } from "../types";
+import type { Bucket, PlanMode, Snapshot, TaskRow } from "../types";
 import { BoardColumns, BoardSidebar, LoadMeter, PanelColumns } from "./PlanColumns";
 import { applyMove, COLUMN_LABEL, estimateLabel, openIn, projectColor, projectedLoad, spentOf, type Column, type Load } from "./planModel";
 import { PlayIcon, type CardActions } from "./TaskCard";
 import { stepBefore, useDragList } from "./useDragList";
+import { nextDest, useParsedTask, useShake } from "./useTaskDraft";
 import "./plan.css";
 
 const COLUMN_KEY = "chronos.planColumn";
-const DEST_CYCLE: Bucket[] = ["today", "week", "backlog"];
 
 export function Plan({ mode, setMode }: { mode: PlanMode; setMode(m: PlanMode): void }) {
   const snap = useSnapshot();
@@ -237,21 +237,11 @@ function LoadBar({ load }: { load: Load }) {
 function QuickAdd({ viewing, board, onAdded }: { viewing: Bucket; board: boolean; onAdded(row: TaskRow): void }) {
   const [text, setText] = useState("");
   const [dest, setDest] = useState<Bucket>(viewing);
-  const [parsed, setParsed] = useState<ParsedTask | null>(null);
-  const [bad, setBad] = useState(false);
-  const seq = useRef(0);
+  const parsed = useParsedTask(text);
+  const [bad, shake] = useShake();
 
   useEffect(() => setDest(viewing), [viewing]);
-  useEffect(() => {
-    const n = ++seq.current;
-    if (!text.trim()) return setParsed(null);
-    api.taskParse(text).then((p) => n === seq.current && setParsed(p));
-  }, [text]);
 
-  const shake = () => {
-    setBad(true);
-    setTimeout(() => setBad(false), 400);
-  };
   const add = () => {
     if (!text.trim()) return;
     api.taskAdd(text, dest, false).then(
@@ -280,7 +270,7 @@ function QuickAdd({ viewing, board, onAdded }: { viewing: Bucket; board: boolean
               add();
             } else if (e.key === "Tab" && !e.shiftKey && text.trim()) {
               e.preventDefault();
-              setDest(DEST_CYCLE[(DEST_CYCLE.indexOf(dest) + 1) % DEST_CYCLE.length]);
+              setDest(nextDest(dest));
             } else if (e.key === "Escape") {
               if (text) setText("");
               else (e.target as HTMLInputElement).blur();
@@ -297,7 +287,7 @@ function QuickAdd({ viewing, board, onAdded }: { viewing: Bucket; board: boolean
               <i style={{ background: projectColor(parsed.project) }} />#{parsed.project}
             </span>
           )}
-          <button className="qa-chip dest" title="Tab changes where it goes" onClick={() => setDest(DEST_CYCLE[(DEST_CYCLE.indexOf(dest) + 1) % 3])}>
+          <button className="qa-chip dest" title="Tab changes where it goes" onClick={() => setDest(nextDest(dest))}>
             → {COLUMN_LABEL[dest]}
           </button>
           <span className="qa-hint">{parsed ? "Tab to change list" : "Needs a title"}</span>

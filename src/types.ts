@@ -113,6 +113,8 @@ export interface Settings {
   dnd: boolean;
   menuBarTimer: "off" | "hidden" | "always";
   distractionShortcut: string;
+  /** Opens the add-task popup from any app. */
+  quickAddShortcut: string;
   reflection: boolean;
   notifications: boolean;
   companion: boolean;
@@ -245,7 +247,8 @@ export interface PeriodStats {
 
 export type Quick =
   | { kind: "distraction"; id: number; countToday: number; sessionNumber: number | null }
-  | { kind: "reflection"; sessionId: number; minutes: number; task: string | null; project: string | null };
+  | { kind: "reflection"; sessionId: number; minutes: number; task: string | null; project: string | null }
+  | { kind: "addTask" };
 
 export interface EmailStatus {
   hasPassword: boolean;

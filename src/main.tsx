@@ -9,7 +9,8 @@ import { Quick } from "./quick/Quick";
 const view = api.view();
 document.documentElement.classList.add(`${view}-window`);
 if (isTauri) document.documentElement.classList.add("tauri");
-if (view === "panel") document.documentElement.dataset.theme = cachedTheme();
+// The panel and the add-task popup follow the panel theme.
+if (view !== "clock") document.documentElement.dataset.theme = cachedTheme();
 const previewParams = new URLSearchParams(location.search);
 if (!isTauri && view !== "panel") {
   // Browser preview: put the transparent clock on a desk-coloured backdrop
@@ -20,7 +21,8 @@ if (!isTauri && view !== "panel") {
   if (view === "quick") {
     // Pin the preview to the popup's real window size (headless Chrome won't go that narrow).
     const root = document.getElementById("root")!;
-    root.style.cssText = `position:relative;width:330px;height:${previewParams.get("quick") === "reflection" ? 186 : 146}px`;
+    const quick = previewParams.get("quick");
+    root.style.cssText = quick === "add" ? "position:relative;width:600px;height:168px" : `position:relative;width:330px;height:${quick === "reflection" ? 186 : 146}px`;
   }
 }
 

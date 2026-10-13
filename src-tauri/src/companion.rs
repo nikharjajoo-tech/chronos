@@ -38,6 +38,8 @@ pub struct CompanionState(pub Mutex<Companion>);
 pub enum Quick {
     Distraction { id: i64, count_today: u32, session_number: Option<u32> },
     Reflection { session_id: i64, minutes: i64, task: Option<String>, project: Option<String> },
+    /// ⌃⌥T: type a task from any app.
+    AddTask,
 }
 
 fn comp<R>(app: &AppHandle, f: impl FnOnce(&mut Companion) -> R) -> R {
@@ -335,6 +337,18 @@ pub fn log_distraction(app: &AppHandle) {
     }
 }
 
+/// ⌃⌥T or the menu: open the add-task popup, or close it if it is open.
+/// It works with the clock hidden; capturing a task shouldn't depend on it.
+pub fn toggle_add_task(app: &AppHandle) {
+    let open = matches!(quick_state(app), Some(Quick::AddTask))
+        && app.get_webview_window(QUICK).is_some_and(|w| w.is_visible().unwrap_or(false));
+    if open {
+        hide_quick(app);
+    } else {
+        show_quick(app, Quick::AddTask, true);
+    }
+}
+
 pub fn quick_state(app: &AppHandle) -> Option<Quick> {
     comp(app, |c| c.quick.clone())
 }
@@ -350,6 +364,8 @@ fn show_quick(app: &AppHandle, q: Quick, focus: bool) {
     let (w, h) = match q {
         Quick::Distraction { .. } => (330.0, 146.0),
         Quick::Reflection { .. } => (330.0, 186.0),
+        // Room around the card for its shadow.
+        Quick::AddTask => (600.0, 168.0),
     };
     comp(app, |c| c.quick = Some(q.clone()));
     let capture_protected = shell::with_engine(app, |e| e.settings.capture_protected);
@@ -377,12 +393,30 @@ fn show_quick(app: &AppHandle, q: Quick, focus: bool) {
         }
     };
     let _ = win.set_size(LogicalSize::new(w, h));
-    let _ = win.set_position(quick_position(app, w, h));
+    let pos = match q {
+        Quick::AddTask => centred_upper_third(app, w, h),
+        _ => quick_position(app, w, h),
+    };
+    let _ = win.set_position(pos);
     let _ = win.set_content_protected(capture_protected);
     let _ = win.emit(EV_QUICK, &q);
     let _ = win.show();
     if focus {
         let _ = win.set_focus();
+    }
+}
+
+/// Centred in the upper third of the screen the pointer is on, like Spotlight.
+fn centred_upper_third(app: &AppHandle, w: f64, h: f64) -> LogicalPosition<f64> {
+    let at_cursor = app.cursor_position().ok().and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten());
+    match at_cursor.or_else(|| app.primary_monitor().ok().flatten()) {
+        Some(m) => {
+            let f = m.scale_factor();
+            let area = m.work_area();
+            let (apos, asize) = (area.position.to_logical::<f64>(f), area.size.to_logical::<f64>(f));
+            LogicalPosition::new(apos.x + (asize.width - w) / 2.0, apos.y + (asize.height / 3.0 - h / 2.0).max(24.0))
+        }
+        None => LogicalPosition::new(200.0, 160.0),
     }
 }
 
@@ -440,5 +474,6 @@ mod tests {
             serde_json::to_value(&q).unwrap(),
             serde_json::json!({ "kind": "distraction", "id": 3, "countToday": 2, "sessionNumber": 4 })
         );
+        assert_eq!(serde_json::to_value(&Quick::AddTask).unwrap(), serde_json::json!({ "kind": "addTask" }));
     }
 }

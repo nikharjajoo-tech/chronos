@@ -7,6 +7,7 @@ import { api } from "../api";
 import { fmtTime } from "../format";
 import { useSettings } from "../hooks";
 import { DISTRACTION_CATEGORIES, type Quick as QuickData } from "../types";
+import { AddTask } from "./AddTask";
 import "./quick.css";
 
 const RATINGS = [
@@ -29,6 +30,7 @@ export function Quick() {
     return api.onQuick(setQ);
   }, []);
   if (!q) return null;
+  if (q.kind === "addTask") return <AddTask />;
   return (
     <div className={`quick-root style-${settings?.style ?? "retro"}`}>
       {q.kind === "distraction" ? <Distraction key={q.id} q={q} /> : <Reflection key={q.sessionId} q={q} />}

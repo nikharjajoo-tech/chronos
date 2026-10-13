@@ -264,10 +264,14 @@ pub fn set_settings(app: AppHandle, state: State<AppState>, settings: Settings) 
     let mut next = settings.sanitized();
 
     let mut shortcut_error = None;
-    if next.hide_shortcut != previous.hide_shortcut || next.distraction_shortcut != previous.distraction_shortcut {
+    if next.hide_shortcut != previous.hide_shortcut
+        || next.distraction_shortcut != previous.distraction_shortcut
+        || next.quick_add_shortcut != previous.quick_add_shortcut
+    {
         if let Err(e) = shell::register_shortcuts(&app, &next, Some(&previous)) {
             next.hide_shortcut = previous.hide_shortcut.clone();
             next.distraction_shortcut = previous.distraction_shortcut.clone();
+            next.quick_add_shortcut = previous.quick_add_shortcut.clone();
             shortcut_error = Some(e);
         }
     }

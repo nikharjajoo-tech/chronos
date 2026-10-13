@@ -332,7 +332,7 @@ pub fn place_clock_first_run(app: &AppHandle) {
 /// previous pair is restored so the user is never left without them.
 pub fn register_shortcuts(app: &AppHandle, s: &Settings, previous: Option<&Settings>) -> Result<(), String> {
     let gs = app.global_shortcut();
-    let bind = |hide: &str, distraction: &str| -> Result<(), String> {
+    let bind = |hide: &str, distraction: &str, add: &str| -> Result<(), String> {
         let _ = gs.unregister_all();
         gs.on_shortcut(hide, |app, _, event| {
             if event.state == ShortcutState::Pressed {
@@ -345,13 +345,19 @@ pub fn register_shortcuts(app: &AppHandle, s: &Settings, previous: Option<&Setti
                 companion::log_distraction(app);
             }
         })
-        .map_err(|e| format!("Couldn't use “{}” to log distractions: {e}", pretty_shortcut(distraction)))
+        .map_err(|e| format!("Couldn't use “{}” to log distractions: {e}", pretty_shortcut(distraction)))?;
+        gs.on_shortcut(add, |app, _, event| {
+            if event.state == ShortcutState::Pressed {
+                companion::toggle_add_task(app);
+            }
+        })
+        .map_err(|e| format!("Couldn't use “{}” to add tasks: {e}", pretty_shortcut(add)))
     };
-    match bind(&s.hide_shortcut, &s.distraction_shortcut) {
+    match bind(&s.hide_shortcut, &s.distraction_shortcut, &s.quick_add_shortcut) {
         Ok(()) => Ok(()),
         Err(err) => {
             if let Some(p) = previous {
-                let _ = bind(&p.hide_shortcut, &p.distraction_shortcut);
+                let _ = bind(&p.hide_shortcut, &p.distraction_shortcut, &p.quick_add_shortcut);
             }
             Err(err)
         }
@@ -421,6 +427,7 @@ pub fn build_tray(app: &AppHandle, shortcut: &str) -> tauri::Result<()> {
         .item(&next_task)
         .item(&MenuItem::with_id(app, "act:add5", "Add 5 Minutes", true, None::<&str>)?)
         .item(&MenuItem::with_id(app, "distraction", "Log a Distraction", true, None::<&str>)?)
+        .item(&MenuItem::with_id(app, "add-task", "Add Task…", true, None::<&str>)?)
         .separator()
         .item(&MenuItem::with_id(app, "panel:today", "Today’s Stats…", true, None::<&str>)?)
         .item(&MenuItem::with_id(app, "panel:plan", "Plan…", true, None::<&str>)?)
@@ -517,6 +524,7 @@ pub fn clock_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item("act:add10", "Add 10 Minutes", true)?)
         .item(&item("act:sub5", "Remove 5 Minutes", true)?)
         .item(&item("distraction", &format!("Log a Distraction    {}", pretty_shortcut(&settings.distraction_shortcut)), true)?)
+        .item(&item("add-task", &format!("Add Task…    {}", pretty_shortcut(&settings.quick_add_shortcut)), true)?)
         .item(&switch.build()?)
         .item(&presets.build()?)
         .separator()
@@ -569,6 +577,8 @@ pub fn on_menu_event(app: &AppHandle, event: MenuEvent) {
         toggle_clock(app);
     } else if id == "distraction" {
         companion::log_distraction(app);
+    } else if id == "add-task" {
+        companion::toggle_add_task(app);
     } else if id == "aot" {
         change_settings(app, |s| s.always_on_top = !s.always_on_top);
     } else if id == "quit" {

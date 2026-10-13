@@ -87,6 +87,8 @@ pub struct Settings {
     /// "off" | "hidden" | "always"
     pub menu_bar_timer: String,
     pub distraction_shortcut: String,
+    /// Opens the add-task popup from any app.
+    pub quick_add_shortcut: String,
     /// Ask "how did it go?" after a focus session.
     pub reflection: bool,
     pub notifications: bool,
@@ -137,6 +139,7 @@ impl Default for Settings {
             dnd: false,
             menu_bar_timer: "off".into(),
             distraction_shortcut: "Control+Alt+D".into(),
+            quick_add_shortcut: "Control+Alt+T".into(),
             reflection: true,
             notifications: true,
             companion: true,
@@ -188,6 +191,9 @@ impl Settings {
         }
         if self.distraction_shortcut.trim().is_empty() {
             self.distraction_shortcut = Settings::default().distraction_shortcut;
+        }
+        if self.quick_add_shortcut.trim().is_empty() {
+            self.quick_add_shortcut = Settings::default().quick_add_shortcut;
         }
         self.away_min = self.away_min.min(60);
         self.email_day = self.email_day.min(6);

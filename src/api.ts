@@ -152,7 +152,7 @@ function mockBackend(): Backend {
     theme: (q.get("theme") as Settings["theme"]) ?? "glass",
     scale: 1, launchAtLogin: true, showInDock: false,
     awayMin: 5, autoHide: true, autoHideApps: ["CptHost", "screencaptureui", "obs"], dnd: false,
-    menuBarTimer: "off", distractionShortcut: "Control+Alt+D", reflection: true, notifications: true, companion: true,
+    menuBarTimer: "off", distractionShortcut: "Control+Alt+D", quickAddShortcut: "Control+Alt+T", reflection: true, notifications: true, companion: true,
     emailReport: q.has("email"), emailTo: q.has("email") ? "you@gmail.com" : "", emailFrom: q.has("email") ? "you@gmail.com" : "", emailDay: 0, emailHour: 9,
     sound: true, volume: 0.6, dailyGoalMin: 180,
   };
@@ -484,7 +484,9 @@ function mockBackend(): Backend {
     setDistractionCategory: async () => {},
     rateSession: async () => {},
     quickState: async () =>
-      q.get("quick") === "reflection"
+      q.get("quick") === "add"
+        ? { kind: "addTask" }
+        : q.get("quick") === "reflection"
         ? { kind: "reflection", sessionId: 1, minutes: 25, task: "Finish AI PM resume", project: "job-search" }
         : { kind: "distraction", id: 1, countToday: 3, sessionNumber: 3 },
     quickClose: async () => {},

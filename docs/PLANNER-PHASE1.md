@@ -545,6 +545,14 @@ in the morning therefore shows it once, and never again that day.
   - ⌘Enter adds the task **and starts it** (`StartTask`).
 - **When the clock is hidden** (⌘⇧H or auto-hide): the popup still works,
   since capture shouldn't depend on the clock being visible.
+- **Closing:** Esc closes and clears it. Clicking into another app also
+  closes it but keeps what you typed, so nothing is lost. Pressing ⌃⌥T while
+  it is open closes it.
+- **Theme:** it follows the panel theme (Glass or Retro, light or dark). The
+  card is near-opaque because the popup window has no vibrancy.
+- **Menu:** "Add Task… ⌃⌥T" in the tray and the clock's ⋯ menu. The shortcut
+  is set in a new **Planning** card in Settings (step 8 adds the morning
+  prompt options to the same card).
 
 ---
 

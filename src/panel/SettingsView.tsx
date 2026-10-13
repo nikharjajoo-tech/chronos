@@ -147,6 +147,14 @@ export function SettingsView() {
       </section>
 
       <section className="card">
+        <h3>Planning</h3>
+        <Row label="Add a task from any app">
+          <ShortcutRecorder value={settings.quickAddShortcut} onChange={(v) => save({ quickAddShortcut: v }, true)} />
+        </Row>
+        <p className="note">Opens a small box over whatever you're doing. Enter adds to Today, ⌘Enter adds it and starts focus.</p>
+      </section>
+
+      <section className="card">
         <h3>Distractions, reflection & nudges</h3>
         <Row label="Log a distraction">
           <ShortcutRecorder value={settings.distractionShortcut} onChange={(v) => save({ distractionShortcut: v }, true)} />
