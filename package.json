@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:rust": "cd src-tauri && cargo test --lib",
-    "icons": "node scripts/make-icons.mjs && tauri icon app-icon.png -o src-tauri/icons",
+    "icons": "node scripts/make-icons.mjs && tauri icon app-icon.svg -o src-tauri/icons",
     "tauri": "tauri"
   },
   "dependencies": {
