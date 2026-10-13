@@ -21,6 +21,8 @@ interface Props {
   now: number;
   actions: CardActions;
   dragging: boolean;
+  /** Board view: the live card gets its own rows for the timer. */
+  board?: boolean;
   /** Board view: the timer's state, shown on the live card. */
   note?: string;
   style?: CSSProperties;
@@ -30,12 +32,18 @@ interface Props {
 }
 
 /** One open task. Shared by the panel and board layouts. */
-export function TaskCard({ task: t, live, spentMs, now, actions, dragging, note, style, onPointerDown, consumeClick }: Props) {
+export function TaskCard({ task: t, live, spentMs, now, actions, dragging, board, note, style, onPointerDown, consumeClick }: Props) {
   const [editing, setEditing] = useState(false);
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
   const est = estimateLabel(t.estimateMs, spentMs);
   const pct = live && t.estimateMs ? Math.min(1, spentMs / t.estimateMs) : 0;
+  const inline = live && !board;
+  const progress = live && t.estimateMs != null && (
+    <span className="tc-progress" aria-hidden>
+      <i style={{ width: `${pct * 100}%` }} />
+    </span>
+  );
   const nextBucket: Bucket | null = t.bucket === "week" ? "today" : t.bucket === "backlog" ? "week" : null;
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -57,7 +65,7 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, note,
   return (
     <li
       ref={ref}
-      className={`task-card${live ? " live" : ""}${dragging ? " dragging" : ""}${menu ? " menu-open" : ""}`}
+      className={`task-card${live ? " live" : ""}${t.project || t.leftover ? "" : " no-meta"}${dragging ? " dragging" : ""}${menu ? " menu-open" : ""}`}
       data-drag-id={t.id}
       tabIndex={0}
       aria-label={`${t.title}${t.project ? `, #${t.project}` : ""}${est ? `, ${est.text}` : ""}${live ? ", live" : ""}`}
@@ -88,23 +96,26 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, note,
             {t.title}
           </span>
         )}
-        {(live || t.project || t.leftover) && (
+        {(inline || t.project || t.leftover) && (
           <div className="tc-meta">
-            {live && <span className="live-tag">Live</span>}
-            {live && note && <span className="tc-note">{note}</span>}
+            {inline && <span className="live-tag">Live</span>}
             {t.project && (
               <span className="tc-project">
-                <i style={{ background: projectColor(t.project) }} />#{t.project}
+                <i style={{ background: projectColor(t.project) }} />
+                <span>#{t.project}</span>
               </span>
             )}
             {t.leftover && <span className="tc-from">{leftoverLabel(t.movedAt, now)}</span>}
-            {live && t.estimateMs != null && (
-              <span className="tc-progress" aria-hidden>
-                <i style={{ width: `${pct * 100}%` }} />
-              </span>
-            )}
+            {inline && progress}
           </div>
         )}
+        {live && board && (
+          <div className="tc-live">
+            <span className="live-tag">Live</span>
+            {note && <span className="tc-note">{note}</span>}
+          </div>
+        )}
+        {live && board && progress}
       </div>
       {est && <span className={`tc-est${est.over ? " over" : ""}${live ? " live" : ""}`}>{est.text}</span>}
       {!editing && (

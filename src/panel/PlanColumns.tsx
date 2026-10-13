@@ -55,7 +55,9 @@ export function PanelColumns({ tasks, column, setColumn, snap, now, actions, dnd
           </ul>
           {column === "today" && doneToday.length > 0 && (
             <section className="done-group">
-              <h4>Done today</h4>
+              <h4>
+                Done today {doneMs(doneToday) > 0 && <span className="count">· {fmtDuration(doneMs(doneToday))}</span>}
+              </h4>
               <ul className="task-list quiet">
                 {doneToday.map((t) => (
                   <DoneCard key={t.id} task={t} onReopen={() => actions.setDone(t, false)} />
@@ -72,6 +74,7 @@ export function PanelColumns({ tasks, column, setColumn, snap, now, actions, dnd
 /** Board layout: Backlog · This week · Today · Done side by side; drag across them. */
 export function BoardColumns({ tasks, snap, now, actions, dnd, load, liveNote }: Props & { load: Load; liveNote?: string }) {
   const today = startOfDay(now);
+  const doneTodayMs = doneMs(doneSince(tasks, today));
   const drag = dnd.drag;
   const over = drag?.over?.column ?? null;
 
@@ -103,10 +106,14 @@ export function BoardColumns({ tasks, snap, now, actions, dnd, load, liveNote }:
         const list = openIn(tasks, b);
         return column(
           b,
-          b === "today" && (load.goalMs > 0 ? `${fmtDuration(load.projectedMs)} of ${fmtDuration(load.goalMs)}` : fmtDuration(load.projectedMs)),
+          b === "today" && (
+            <span className={load.goalMs > 0 && load.projectedMs > load.goalMs ? "over" : undefined}>
+              {load.goalMs > 0 ? `${fmtDuration(load.projectedMs)} of ${fmtDuration(load.goalMs)}` : fmtDuration(load.projectedMs)}
+            </span>
+          ),
           list.length > 0 ? (
             <ul className={listClass(dnd, "cards")}>
-              <Cards column={b} tasks={list} snap={snap} now={now} actions={actions} dnd={dnd} liveNote={liveNote} />
+              <Cards column={b} tasks={list} snap={snap} now={now} actions={actions} dnd={dnd} board liveNote={liveNote} />
             </ul>
           ) : (
             <p className="col-empty">{drag ? "Drop here" : b === "today" ? "Drag tasks here, or add one above." : "Nothing here yet."}</p>
@@ -114,16 +121,19 @@ export function BoardColumns({ tasks, snap, now, actions, dnd, load, liveNote }:
           list.length,
         );
       })}
-      {column("done", "today", <DoneColumn tasks={tasks} today={today} actions={actions} cards />, doneSince(tasks, today).length)}
+      {column("done", doneTodayMs > 0 ? `${fmtDuration(doneTodayMs)} today` : "today", <DoneColumn tasks={tasks} today={today} actions={actions} cards />, doneSince(tasks, today).length)}
     </div>
   );
 }
+
+/** Focus spent on a list of finished tasks. */
+const doneMs = (done: TaskRow[]) => done.reduce((a, t) => a + t.spentMs, 0);
 
 function listClass(dnd: Dnd, extra = "") {
   return `task-list${extra ? ` ${extra}` : ""}${dnd.settling ? " settling" : ""}${dnd.drag ? " sorting" : ""}`;
 }
 
-function Cards({ column, tasks, snap, now, actions, dnd, liveNote }: Props & { column: Column; liveNote?: string }) {
+function Cards({ column, tasks, snap, now, actions, dnd, board, liveNote }: Props & { column: Column; board?: boolean; liveNote?: string }) {
   const ids = tasks.map((t) => t.id);
   if (tasks.length === 0) return <li className="list-empty">{EMPTY[column]}</li>;
   return tasks.map((t) => (
@@ -135,6 +145,7 @@ function Cards({ column, tasks, snap, now, actions, dnd, liveNote }: Props & { c
       now={now}
       actions={actions}
       dragging={dnd.drag?.id === t.id}
+      board={board}
       note={liveNote}
       style={dnd.styleFor(t.id, column, ids)}
       onPointerDown={(e) => dnd.start(e, t.id, column)}

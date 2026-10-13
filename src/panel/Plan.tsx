@@ -121,6 +121,7 @@ export function Plan({ mode, setMode }: { mode: PlanMode; setMode(m: PlanMode): 
               <h1>Plan</h1>
               <span className="plan-sub">{subtitle("today", tasks, now)}</span>
             </div>
+            <ProjectFilter tasks={tasks} filter={filter} setFilter={setFilter} />
             <span className="plan-spacer" />
             {quickAdd}
             <button className="layout-btn" title="Panel view  ⌘E" onClick={() => setMode("panel")}>
@@ -204,12 +205,30 @@ function subtitle(column: Column, tasks: TaskRow[], now: number): string {
   return est > 0 ? `${n} · ${fmtDuration(est)} estimated` : n;
 }
 
+/** In a narrow board the sidebar folds away and this takes its place. */
+function ProjectFilter({ tasks, filter, setFilter }: { tasks: TaskRow[]; filter: string | null; setFilter(p: string | null): void }) {
+  const counts = new Map<string, number>();
+  for (const t of tasks) if (!t.done && t.project) counts.set(t.project, (counts.get(t.project) ?? 0) + 1);
+  if (filter !== null && !counts.has(filter)) counts.set(filter, 0);
+  const projects = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return (
+    <select className="board-filter" aria-label="Show project" value={filter ?? ""} onChange={(e) => setFilter(e.target.value || null)}>
+      <option value="">All projects</option>
+      {projects.map(([p, n]) => (
+        <option key={p} value={p}>
+          #{p} ({n})
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /** The timer's state, shown on the live card in board view. */
 function liveNote(snap: Snapshot, now: number): string | undefined {
   if (snap.taskId == null) return undefined;
   const left = fmtClock(remainingOf(snap, now));
   if (snap.phase !== "focus") return "on a break";
-  return snap.run === "running" ? `focus · ${left} left` : snap.run === "paused" ? `paused · ${left} left` : undefined;
+  return snap.run === "running" ? `${left} left` : snap.run === "paused" ? `paused · ${left} left` : undefined;
 }
 
 function LoadBar({ load }: { load: Load }) {
