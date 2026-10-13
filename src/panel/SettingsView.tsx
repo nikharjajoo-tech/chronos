@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { api } from "../api";
 import { prettyShortcut, shortcutFromEvent } from "../format";
 import { useSettings } from "../hooks";
@@ -554,13 +554,16 @@ function Row({ label, hint, muted, children }: { label: string; hint?: string; m
 }
 
 function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
+  // Tied to the checkbox by id: without it the label would belong to the
+  // first control inside it, which is the ⓘ button when there is a hint.
+  const id = useId();
   return (
-    <label className="toggle">
+    <label className="toggle" htmlFor={id}>
       <span className="row-label">
         {label}
         {hint && <Info text={hint} />}
       </span>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <i aria-hidden />
     </label>
   );
