@@ -21,6 +21,8 @@ interface Props {
   now: number;
   actions: CardActions;
   dragging: boolean;
+  /** Board view: the timer's state, shown on the live card. */
+  note?: string;
   style?: CSSProperties;
   onPointerDown(e: React.PointerEvent): void;
   /** True when this click ended a drag and should be ignored. */
@@ -28,7 +30,7 @@ interface Props {
 }
 
 /** One open task. Shared by the panel and board layouts. */
-export function TaskCard({ task: t, live, spentMs, now, actions, dragging, style, onPointerDown, consumeClick }: Props) {
+export function TaskCard({ task: t, live, spentMs, now, actions, dragging, note, style, onPointerDown, consumeClick }: Props) {
   const [editing, setEditing] = useState(false);
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
@@ -89,6 +91,7 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, style
         {(live || t.project || t.leftover) && (
           <div className="tc-meta">
             {live && <span className="live-tag">Live</span>}
+            {live && note && <span className="tc-note">{note}</span>}
             {t.project && (
               <span className="tc-project">
                 <i style={{ background: projectColor(t.project) }} />#{t.project}
@@ -108,12 +111,12 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, style
         <div className="tc-actions">
           {t.bucket === "today" && !live && (
             <button className="tc-btn" onClick={() => actions.start(t)} title="Start focus on this task">
-              <PlayIcon /> Start
+              <PlayIcon /> <span className="label">Start</span>
             </button>
           )}
           {nextBucket && (
             <button className="tc-btn" onClick={() => actions.move(t, nextBucket)} title={`Move to ${COLUMN_LABEL[nextBucket]}`}>
-              → {COLUMN_LABEL[nextBucket]}
+              → <span className="label">{COLUMN_LABEL[nextBucket]}</span>
             </button>
           )}
           <button className="tc-btn icon" aria-label="More" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>

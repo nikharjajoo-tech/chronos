@@ -57,6 +57,8 @@ interface DragState {
 
 const THRESHOLD = 4;
 const EDGE = 56;
+/** How far outside a list a drop still counts, to cover the gap between columns. */
+const GAP = 24;
 
 export function useDragList(onDrop: (id: number, drop: Drop) => void) {
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -106,7 +108,9 @@ export function useDragList(onDrop: (id: number, drop: Drop) => void) {
     const locate = (cx: number, cy: number): DragState["over"] => {
       const tab = document.elementFromPoint(cx, cy)?.closest<HTMLElement>("[data-drop-column]");
       if (tab) return { column: tab.dataset.dropColumn as Column, index: -1, list: false };
-      const list = lists.find((l) => cx >= l.left && cx <= l.right);
+      // The list under the pointer, or the nearest one when it is in the gap between columns.
+      const gap = (l: Measured) => Math.max(l.left - cx, cx - l.right, 0);
+      const list = lists.reduce<Measured | null>((best, l) => (gap(l) <= GAP && (!best || gap(l) < gap(best)) ? l : best), null);
       if (!list) return null;
       const others = list.items.filter((it) => it.id !== id);
       return { column: list.column, index: dropIndex(others.map((it) => it.top + it.height / 2), cy + scrollY), list: true };

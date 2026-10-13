@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useSettings, useTheme } from "../hooks";
+import type { PlanMode } from "../types";
 import { History } from "./History";
 import { Insights } from "./Insights";
 import { Plan } from "./Plan";
@@ -23,6 +24,19 @@ export function Panel() {
   const [tab, setTab] = useState<Tab>(tabFromHash);
   const [settings] = useSettings();
   useTheme(settings);
+  const [planMode, setPlanModeState] = useState<PlanMode | null>(null);
+  const board = tab === "plan" && planMode === "board";
+
+  useEffect(() => void api.planMode().then(setPlanModeState), []);
+  // Board view is the same window, widened. Other tabs always use panel size;
+  // coming back to Plan widens it again because Plan remembers "board".
+  useEffect(() => {
+    if (planMode) api.setPanelLayout(board);
+  }, [board, planMode !== null]);
+  const setPlanMode = (m: PlanMode) => {
+    setPlanModeState(m);
+    api.setPlanMode(m);
+  };
 
   useEffect(() => api.onTab((t) => setTab(asTab(t))), []);
   useEffect(() => {
@@ -37,7 +51,7 @@ export function Panel() {
   }, [tab]);
 
   return (
-    <div className="panel">
+    <div className={`panel${board ? " board-layout" : ""}`}>
       <header className="panel-head" data-tauri-drag-region>
         <div className="logo">
           <span className="logo-mark" aria-hidden />
@@ -51,7 +65,7 @@ export function Panel() {
           ))}
         </nav>
       </header>
-      <main className="panel-body">{tab === "today" ? <Today /> : tab === "plan" ? <Plan /> : tab === "history" ? <History /> : tab === "insights" ? <Insights /> : <SettingsView />}</main>
+      <main className="panel-body">{tab === "today" ? <Today /> : tab === "plan" ? planMode && <Plan mode={planMode} setMode={setPlanMode} /> : tab === "history" ? <History /> : tab === "insights" ? <Insights /> : <SettingsView />}</main>
     </div>
   );
 }

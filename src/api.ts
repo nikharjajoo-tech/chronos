@@ -3,7 +3,7 @@
 // screenshotted without the desktop shell. Mock state is seeded from the URL,
 // e.g. ?view=clock&phase=focus&run=running&remaining=1122&task=Write
 
-import type { Action, AppInfo, Bucket, EmailStatus, HelperStatus, InsightsView, ParsedTask, PeriodStats, Quick, Settings, Snapshot, TaskPatch, TaskRow, TodayStats } from "./types";
+import type { Action, AppInfo, Bucket, PlanMode, EmailStatus, HelperStatus, InsightsView, ParsedTask, PeriodStats, Quick, Settings, Snapshot, TaskPatch, TaskRow, TodayStats } from "./types";
 import { MINUTE } from "./format";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
@@ -47,6 +47,11 @@ export interface Backend {
   setSettings(s: Settings): Promise<{ settings: Settings; shortcutError: string | null }>;
   toggleClock(): Promise<void>;
   openPanel(tab?: "today" | "plan" | "history" | "insights" | "settings"): Promise<void>;
+  /** The layout the Plan tab opens in. */
+  planMode(): Promise<PlanMode>;
+  setPlanMode(mode: PlanMode): Promise<void>;
+  /** Widen the panel window into the board, or shrink it back. */
+  setPanelLayout(board: boolean): Promise<void>;
   showClockMenu(): Promise<void>;
   setClockScale(scale: number): Promise<void>;
   testSound(): Promise<void>;
@@ -118,6 +123,9 @@ function tauriBackend(): Backend {
     setSettings: (settings) => invoke("set_settings", { settings }),
     toggleClock: () => invoke("toggle_clock"),
     openPanel: (tab) => invoke("open_panel", { tab: tab ?? null }),
+    planMode: () => invoke("plan_mode"),
+    setPlanMode: (mode) => invoke("set_plan_mode", { mode }),
+    setPanelLayout: (board) => invoke("set_panel_layout", { board }),
     showClockMenu: () => invoke("show_clock_menu"),
     setClockScale: (scale) => invoke("set_clock_scale", { scale }),
     testSound: () => invoke("test_sound"),
@@ -190,6 +198,7 @@ function mockBackend(): Backend {
     seed("backlog", "Clean up old notes", "life", null);
   }
   let deleted: TaskRow | null = null;
+  let planMode: PlanMode = q.has("board") ? "board" : "panel";
   const open = (b: Bucket) => tasks.filter((t) => t.bucket === b && !t.done).sort((a, c) => a.position - c.position);
   const find = (id: number) => tasks.find((t) => t.id === id);
   const live = () => (snap.taskId == null ? undefined : find(snap.taskId));
@@ -496,6 +505,10 @@ function mockBackend(): Backend {
     },
     toggleClock: async () => {},
     openPanel: async () => {},
+    // ?board opens Plan in the board layout. The browser can't resize itself.
+    planMode: async () => planMode,
+    setPlanMode: async (mode) => void (planMode = mode),
+    setPanelLayout: async () => {},
     showClockMenu: async () => {},
     setClockScale: async () => {},
     testSound: async () => {},

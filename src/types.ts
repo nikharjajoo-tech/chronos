@@ -55,6 +55,7 @@ export type Action =
   | { type: "nextTask" };
 
 export type Bucket = "today" | "week" | "backlog";
+export type PlanMode = "panel" | "board";
 
 export interface TaskRow {
   id: number;

@@ -301,6 +301,23 @@ pub fn show_clock_menu(app: AppHandle) -> Result<(), String> {
     w.popup_menu(&menu).map_err(|e| e.to_string())
 }
 
+/// The layout the Plan tab opens in: "panel" or "board".
+#[tauri::command]
+pub fn plan_mode(app: AppHandle) -> String {
+    shell::plan_mode(&app)
+}
+
+#[tauri::command]
+pub fn set_plan_mode(app: AppHandle, mode: String) {
+    shell::set_plan_mode(&app, &mode);
+}
+
+/// Widen the panel window into the board (true) or shrink it back.
+#[tauri::command]
+pub fn set_panel_layout(app: AppHandle, board: bool) {
+    shell::set_panel_layout(&app, board);
+}
+
 /// The user dragged the resize grip: remember the new scale for this widget.
 #[tauri::command]
 pub fn set_clock_scale(app: AppHandle, scale: f64) {

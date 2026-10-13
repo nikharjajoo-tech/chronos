@@ -6,6 +6,7 @@ use crate::engine::{now_ms, Action, Engine, Snapshot};
 use crate::settings::{widget_base_size, Settings, PRESETS, SCALE_RANGE, STYLES, WIDGETS};
 use crate::timer::{Phase, RunState, MINUTE};
 use chrono::{Local, TimeZone};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{CheckMenuItem, Menu, MenuBuilder, MenuEvent, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use tauri::tray::TrayIconBuilder;
@@ -150,11 +151,13 @@ pub fn open_panel(app: &AppHandle, tab: Option<&str>) {
         }
         return;
     }
+    // A new window opens at panel size; the page widens it if Plan wants the board.
+    PANEL_IS_BOARD.store(false, Ordering::SeqCst);
     let url = format!("index.html#{}", tab.unwrap_or("today"));
     let builder = WebviewWindowBuilder::new(app, PANEL, WebviewUrl::App(url.into()))
         .title("Chronos")
-        .inner_size(480.0, 680.0)
-        .min_inner_size(420.0, 520.0)
+        .inner_size(PANEL_SIZES.0 .0, PANEL_SIZES.0 .1)
+        .min_inner_size(PANEL_SIZES.1 .0, PANEL_SIZES.1 .1)
         .resizable(true);
     // A frosted macOS window: the system blur shows through the Glass theme
     // (Retro paints an opaque background over it), and the traffic lights
@@ -195,7 +198,13 @@ fn size_clock(w: &tauri::WebviewWindow, s: &Settings) {
     let target = LogicalSize::new((bw * s.scale).round(), (bh * s.scale).round());
     let _ = w.set_min_size(Some(LogicalSize::new(bw * SCALE_RANGE.0, bh * SCALE_RANGE.0)));
     let _ = w.set_max_size(Some(LogicalSize::new(bw * SCALE_RANGE.1, bh * SCALE_RANGE.1)));
+    resize_keeping_edge(w, target, false);
+}
 
+/// Resize a window, keeping the edge nearest the screen side fixed: a window
+/// near the right edge grows to the left. With `fit`, the result is also
+/// kept inside the screen's visible area (below the menu bar, above the Dock).
+fn resize_keeping_edge(w: &tauri::WebviewWindow, target: LogicalSize<f64>, fit: bool) {
     let Ok(factor) = w.scale_factor() else { return };
     let (Ok(pos), Ok(size)) = (w.outer_position(), w.outer_size()) else { return };
     let pos = pos.to_logical::<f64>(factor);
@@ -203,19 +212,73 @@ fn size_clock(w: &tauri::WebviewWindow, s: &Settings) {
     if (size.width - target.width).abs() < 1.0 && (size.height - target.height).abs() < 1.0 {
         return;
     }
+    let mut target = target;
     let (mut x, mut y) = (pos.x, pos.y);
     if let Ok(Some(m)) = w.current_monitor() {
-        let mpos = m.position().to_logical::<f64>(factor);
-        let msize = m.size().to_logical::<f64>(factor);
-        if pos.x + size.width / 2.0 > mpos.x + msize.width / 2.0 {
+        let area = m.work_area();
+        let apos = area.position.to_logical::<f64>(factor);
+        let asize = area.size.to_logical::<f64>(factor);
+        if pos.x + size.width / 2.0 > apos.x + asize.width / 2.0 {
             x = pos.x + size.width - target.width;
         }
-        if pos.y + size.height / 2.0 > mpos.y + msize.height / 2.0 {
+        if pos.y + size.height / 2.0 > apos.y + asize.height / 2.0 {
             y = pos.y + size.height - target.height;
+        }
+        if fit {
+            target.width = target.width.min(asize.width);
+            target.height = target.height.min(asize.height);
+            x = x.clamp(apos.x, apos.x + asize.width - target.width);
+            y = y.clamp(apos.y, apos.y + asize.height - target.height);
         }
     }
     let _ = w.set_size(target);
     let _ = w.set_position(LogicalPosition::new(x, y));
+}
+
+const K_PLAN_MODE: &str = "plan_mode";
+const K_PANEL_SIZE: &str = "panel_size";
+const K_BOARD_SIZE: &str = "board_size";
+/// (default, minimum) inner sizes of the panel window's two layouts.
+const PANEL_SIZES: ((f64, f64), (f64, f64)) = ((480.0, 680.0), (420.0, 520.0));
+const BOARD_SIZES: ((f64, f64), (f64, f64)) = ((1240.0, 760.0), (960.0, 560.0));
+/// Whether the panel window is currently widened into the board.
+static PANEL_IS_BOARD: AtomicBool = AtomicBool::new(false);
+
+/// The layout the Plan tab opens in: "panel" or "board".
+pub fn plan_mode(app: &AppHandle) -> String {
+    let mode = with_engine(app, |e| e.db.kv_get::<String>(K_PLAN_MODE));
+    if mode.as_deref() == Some("board") { "board" } else { "panel" }.to_string()
+}
+
+pub fn set_plan_mode(app: &AppHandle, mode: &str) {
+    let mode = if mode == "board" { "board" } else { "panel" };
+    with_engine(app, |e| {
+        let _ = e.db.kv_set(K_PLAN_MODE, &mode);
+    });
+}
+
+/// Widen the panel window into the board, or shrink it back. Each layout
+/// comes back at the size it was last dragged to.
+pub fn set_panel_layout(app: &AppHandle, board: bool) {
+    let Some(w) = app.get_webview_window(PANEL) else { return };
+    if PANEL_IS_BOARD.swap(board, Ordering::SeqCst) == board {
+        return;
+    }
+    let Ok(factor) = w.scale_factor() else { return };
+    if let Ok(size) = w.inner_size() {
+        let size = size.to_logical::<f64>(factor);
+        let leaving = if board { K_PANEL_SIZE } else { K_BOARD_SIZE };
+        with_engine(app, |e| {
+            let _ = e.db.kv_set(leaving, &(size.width.round(), size.height.round()));
+        });
+    }
+    let (key, (default, min)) = if board { (K_BOARD_SIZE, BOARD_SIZES) } else { (K_PANEL_SIZE, PANEL_SIZES) };
+    let saved = with_engine(app, |e| e.db.kv_get::<(f64, f64)>(key));
+    let (tw, th) = saved.filter(|(sw, sh)| *sw >= min.0 && *sh >= min.1).unwrap_or(default);
+    // Lower the minimum first so the panel can shrink, raise it after growing.
+    let _ = w.set_min_size(Some(LogicalSize::new(PANEL_SIZES.1 .0, PANEL_SIZES.1 .1)));
+    resize_keeping_edge(&w, LogicalSize::new(tw, th), true);
+    let _ = w.set_min_size(Some(LogicalSize::new(min.0, min.1)));
 }
 
 /// App-level settings: open at login, Dock icon. Only touches what changed.

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { fmtClock, fmtDuration } from "../format";
 import { remainingOf, useSecondTick, useSettings, useSnapshot } from "../hooks";
-import type { Bucket, ParsedTask, Snapshot, TaskRow } from "../types";
-import { PanelColumns } from "./PlanColumns";
+import type { Bucket, ParsedTask, PlanMode, Snapshot, TaskRow } from "../types";
+import { BoardColumns, BoardSidebar, LoadMeter, PanelColumns } from "./PlanColumns";
 import { applyMove, COLUMN_LABEL, estimateLabel, openIn, projectColor, projectedLoad, spentOf, type Column, type Load } from "./planModel";
 import { PlayIcon, type CardActions } from "./TaskCard";
 import { stepBefore, useDragList } from "./useDragList";
@@ -12,14 +12,28 @@ import "./plan.css";
 const COLUMN_KEY = "chronos.planColumn";
 const DEST_CYCLE: Bucket[] = ["today", "week", "backlog"];
 
-export function Plan() {
+export function Plan({ mode, setMode }: { mode: PlanMode; setMode(m: PlanMode): void }) {
   const snap = useSnapshot();
   const now = useSecondTick(snap);
   const [settings] = useSettings();
   const [tasks, setTasks] = useTasks(snap);
   const [column, setColumnState] = useState<Column>(savedColumn);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [filter, setFilter] = useState<string | null>(null);
   const refocus = useRef<number | null>(null);
+  const board = mode === "board";
+
+  // ⌘E switches between the panel and the board.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey && !e.ctrlKey && !e.altKey && e.code === "KeyE") {
+        e.preventDefault();
+        setMode(board ? "panel" : "board");
+      }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [board]);
 
   const setColumn = (c: Column) => {
     setColumnState(c);
@@ -59,7 +73,7 @@ export function Plan() {
     setDone,
     move: (t, bucket, beforeId = null) => {
       move(t.id, bucket, beforeId);
-      if (bucket !== column) setToast({ text: `Moved to ${COLUMN_LABEL[bucket]}` });
+      if (!board && bucket !== column) setToast({ text: `Moved to ${COLUMN_LABEL[bucket]}` });
     },
     step: (t, delta) => {
       const ids = openIn(tasks ?? [], t.bucket).map((x) => x.id);
@@ -86,7 +100,39 @@ export function Plan() {
 
   const todayTasks = openIn(tasks, "today");
   const load = projectedLoad(todayTasks, focusNow(snap, now), snap.goalMs, (t) => spentOf(t, snap, now));
-  const viewing: Bucket = column === "done" ? "today" : column;
+  const viewing: Bucket = board || column === "done" ? "today" : column;
+  const quickAdd = (
+    <QuickAdd
+      viewing={viewing}
+      board={board}
+      onAdded={(row) => !board && row.bucket !== column && setToast({ text: `Added to ${COLUMN_LABEL[row.bucket]}` })}
+    />
+  );
+  const toastBar = toast && <ToastBar toast={toast} onClose={() => setToast(null)} />;
+
+  if (board) {
+    const shown = filter ? tasks.filter((t) => t.project === filter) : tasks;
+    return (
+      <div className="plan board">
+        <BoardSidebar tasks={tasks} filter={filter} setFilter={setFilter} load={load} />
+        <div className="board-main">
+          <div className="board-top">
+            <div>
+              <h1>Plan</h1>
+              <span className="plan-sub">{subtitle("today", tasks, now)}</span>
+            </div>
+            <span className="plan-spacer" />
+            {quickAdd}
+            <button className="layout-btn" title="Panel view  ⌘E" onClick={() => setMode("panel")}>
+              <ShrinkIcon /> Panel view
+            </button>
+          </div>
+          <BoardColumns tasks={shown} snap={snap} now={now} actions={actions} dnd={dnd} load={load} liveNote={liveNote(snap, now)} />
+        </div>
+        {toastBar}
+      </div>
+    );
+  }
 
   return (
     <div className="plan">
@@ -95,18 +141,21 @@ export function Plan() {
           <h1>{COLUMN_LABEL[column]}</h1>
           <span className="plan-sub">{subtitle(column, tasks, now)}</span>
         </div>
+        <button className="layout-btn" title="Board view  ⌘E" onClick={() => setMode("board")}>
+          <ExpandIcon /> Board view
+        </button>
       </div>
 
       {column === "today" && <LoadBar load={load} />}
 
-      <QuickAdd viewing={viewing} onAdded={(row) => row.bucket !== column && setToast({ text: `Added to ${COLUMN_LABEL[row.bucket]}` })} />
+      {quickAdd}
 
       <PanelColumns tasks={tasks} column={column} setColumn={setColumn} snap={snap} now={now} actions={actions} dnd={dnd} />
 
       <span className="plan-spacer" />
       <Footer snap={snap} now={now} top={todayTasks[0] ?? null} focusMin={settings?.focusMin ?? 25} shortMin={settings?.shortMin ?? 5} />
 
-      {toast && <ToastBar toast={toast} onClose={() => setToast(null)} />}
+      {toastBar}
     </div>
   );
 }
@@ -155,11 +204,17 @@ function subtitle(column: Column, tasks: TaskRow[], now: number): string {
   return est > 0 ? `${n} · ${fmtDuration(est)} estimated` : n;
 }
 
+/** The timer's state, shown on the live card in board view. */
+function liveNote(snap: Snapshot, now: number): string | undefined {
+  if (snap.taskId == null) return undefined;
+  const left = fmtClock(remainingOf(snap, now));
+  if (snap.phase !== "focus") return "on a break";
+  return snap.run === "running" ? `focus · ${left} left` : snap.run === "paused" ? `paused · ${left} left` : undefined;
+}
+
 function LoadBar({ load }: { load: Load }) {
   const { doneMs, toGoMs, projectedMs, goalMs, unestimated } = load;
-  const scale = Math.max(goalMs, projectedMs, 1);
   const overMs = goalMs > 0 ? projectedMs - goalMs : 0;
-  const pct = (ms: number) => `${(ms / scale) * 100}%`;
   const right =
     goalMs === 0 ? null
     : overMs > 0 ? `${fmtDuration(overMs)} over`
@@ -174,16 +229,12 @@ function LoadBar({ load }: { load: Load }) {
         </span>
         {right && <span className={overMs > 0 ? "over" : ""}>{right}</span>}
       </div>
-      <div className="load-bar" aria-hidden>
-        <i className="done" style={{ width: pct(doneMs) }} />
-        <i className="togo" style={{ left: pct(doneMs), width: pct(toGoMs) }} />
-        {overMs > 0 && <i className="over" style={{ left: pct(goalMs), width: pct(overMs) }} />}
-      </div>
+      <LoadMeter load={load} />
     </div>
   );
 }
 
-function QuickAdd({ viewing, onAdded }: { viewing: Bucket; onAdded(row: TaskRow): void }) {
+function QuickAdd({ viewing, board, onAdded }: { viewing: Bucket; board: boolean; onAdded(row: TaskRow): void }) {
   const [text, setText] = useState("");
   const [dest, setDest] = useState<Bucket>(viewing);
   const [parsed, setParsed] = useState<ParsedTask | null>(null);
@@ -221,7 +272,7 @@ function QuickAdd({ viewing, onAdded }: { viewing: Bucket; onAdded(row: TaskRow)
         <input
           value={text}
           maxLength={200}
-          placeholder="Add a task   e.g. Prep slides 30m #course"
+          placeholder={board ? "Add a task to Today   e.g. Call recruiter 15m #job-search" : "Add a task   e.g. Prep slides 30m #course"}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -321,3 +372,15 @@ function ToastBar({ toast, onClose }: { toast: Toast; onClose(): void }) {
     </div>
   );
 }
+
+const ExpandIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden>
+    <path d="M8.5 1.5h4v4M12.5 1.5 8 6M5.5 12.5h-4v-4M1.5 12.5 6 8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const ShrinkIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden>
+    <path d="M12.5 5.5h-4v-4M8.5 5.5 13 1M1.5 8.5h4v4M5.5 8.5 1 13" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);

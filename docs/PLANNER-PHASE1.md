@@ -378,10 +378,15 @@ in 480px, tab padding drops from `7px 14px` to `7px 10px`.
 
 ### 6.2 The toggle
 
-- **Controls:** a ⤢ button at the end of the column switcher (panel layout),
+- **Controls:** a ⤢ button beside the list title (panel layout),
   a **⤡ Panel view** button in the header (board layout), and **⌘E** anywhere
   in the panel window while on Plan.
-- **Resizing:** `shell::set_plan_mode` resizes the panel window. The
+- **Tabs stay visible:** the tab bar stays above the board, so History,
+  Insights and the rest are one click away in either layout.
+- **Commands:** `plan_mode` / `set_plan_mode` store which layout Plan opens
+  in; `set_panel_layout(board)` resizes the window. The page asks for the
+  board only while Plan is showing and the mode is `board`.
+- **Resizing:** `shell::set_panel_layout` resizes the panel window. The
   "keep the edge nearest the screen side fixed" logic is moved out of
   `size_clock` into a shared `resize_keeping_edge(window, target)`, so a
   panel near the right edge grows to the left. The result is clamped to the
