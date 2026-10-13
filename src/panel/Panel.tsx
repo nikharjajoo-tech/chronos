@@ -3,13 +3,15 @@ import { api } from "../api";
 import { useSettings, useTheme } from "../hooks";
 import { History } from "./History";
 import { Insights } from "./Insights";
+import { Plan } from "./Plan";
 import { SettingsView } from "./SettingsView";
 import { Today } from "./Today";
 import "./panel.css";
 
-type Tab = "today" | "history" | "insights" | "settings";
+type Tab = "today" | "plan" | "history" | "insights" | "settings";
 const TABS: { id: Tab; label: string }[] = [
   { id: "today", label: "Today" },
+  { id: "plan", label: "Plan" },
   { id: "history", label: "History" },
   { id: "insights", label: "Insights" },
   { id: "settings", label: "Settings" },
@@ -49,7 +51,7 @@ export function Panel() {
           ))}
         </nav>
       </header>
-      <main className="panel-body">{tab === "today" ? <Today /> : tab === "history" ? <History /> : tab === "insights" ? <Insights /> : <SettingsView />}</main>
+      <main className="panel-body">{tab === "today" ? <Today /> : tab === "plan" ? <Plan /> : tab === "history" ? <History /> : tab === "insights" ? <Insights /> : <SettingsView />}</main>
     </div>
   );
 }

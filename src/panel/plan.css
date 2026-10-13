@@ -1,0 +1,221 @@
+/* Plan tab. Reads the panel.css tokens, so it follows Glass and Retro and
+   light or dark; Glass-only shapes are at the end. */
+
+:root {
+  --menu-bg: var(--card);
+}
+html[data-theme="glass"] { --menu-bg: rgba(246, 246, 248, 0.97); }
+@media (prefers-color-scheme: dark) {
+  html[data-theme="glass"] { --menu-bg: rgba(44, 44, 46, 0.97); }
+}
+
+.panel-body:has(> .plan) { flex: 1; display: flex; flex-direction: column; padding-bottom: 0; }
+.plan { flex: 1; display: flex; flex-direction: column; gap: 14px; }
+.plan-spacer { flex: 1; margin-top: -14px; }
+
+.plan-title h1 { margin: 0; font-size: 24px; line-height: 30px; font-weight: 700; letter-spacing: -0.3px; }
+.plan-sub { color: var(--ink-3); font-size: 13px; }
+
+/* ── today's load ──────────────────────────────────────────────────────── */
+.load-text { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--ink-3); }
+.load-text strong { color: var(--ink); font-weight: 600; }
+.load-text .over { color: var(--accent-text); font-weight: 600; white-space: nowrap; }
+.load-bar { position: relative; height: 6px; margin-top: 7px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.load-bar i { position: absolute; top: 0; bottom: 0; }
+.load-bar .done { left: 0; background: var(--accent); }
+.load-bar .togo { background: color-mix(in srgb, var(--accent) 42%, transparent); }
+.load-bar .over {
+  background: repeating-linear-gradient(135deg, var(--accent) 0 3px, color-mix(in srgb, var(--accent) 30%, transparent) 3px 6px);
+}
+
+/* ── quick add ─────────────────────────────────────────────────────────── */
+.quick-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: text;
+}
+.quick-add:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.quick-add.bad, .tc-edit.bad { animation: shake 0.35s; border-color: var(--warn); }
+.qa-plus { color: var(--ink-3); font-size: 18px; font-weight: 300; line-height: 1; }
+.quick-add input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font: inherit; color: var(--ink); }
+.quick-add input::placeholder { color: var(--ink-3); }
+.quick-add kbd { font: 11px/16px inherit; font-family: inherit; color: var(--ink-3); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.qa-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.qa-chip {
+  display: inline-flex; align-items: center; gap: 5px; border: 0; padding: 1px 8px; border-radius: 999px;
+  background: var(--bg-2); color: var(--ink-2); font: 500 11.5px/18px inherit; font-family: inherit;
+}
+.qa-chip i { width: 7px; height: 7px; border-radius: 50%; }
+.qa-chip.dest { color: var(--accent-text); font-weight: 600; cursor: pointer; }
+.qa-hint { margin-left: auto; font-size: 11px; color: var(--ink-3); }
+
+/* ── column switcher ───────────────────────────────────────────────────── */
+.plan-cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 2px; border-radius: 8px; background: var(--bg-2); }
+.plan-cols button {
+  border: 0; background: none; padding: 5px 0; border-radius: 6px; cursor: pointer;
+  font: 500 12px/16px inherit; font-family: inherit; color: var(--ink-2); white-space: nowrap;
+}
+.plan-cols button.on { background: var(--card-solid); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14); }
+.plan-cols .count { color: var(--ink-3); font-weight: 500; margin-left: 1px; }
+.plan-cols button.drop-over { background: color-mix(in srgb, var(--accent) 18%, transparent); box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--ink); }
+
+/* ── task list ─────────────────────────────────────────────────────────── */
+.task-list { list-style: none; margin: 0; padding: 0; border-radius: 11px; background: var(--card); border: 1px solid var(--line); }
+.task-list.quiet { background: color-mix(in srgb, var(--card) 65%, transparent); }
+.list-empty { padding: 18px 16px; text-align: center; font-size: 12.5px; color: var(--ink-3); }
+
+.task-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  border-top: 1px solid var(--line);
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+  transition: transform 0.16s ease;
+}
+.task-card:first-child { border-top-color: transparent; border-radius: 10px 10px 0 0; }
+.task-card:last-child { border-radius: 0 0 10px 10px; }
+.task-card:only-child { border-radius: 10px; }
+.task-card:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent); border-radius: 10px; }
+.task-card.live { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.task-card.dragging {
+  z-index: 5;
+  pointer-events: none;
+  transition: none;
+  border-radius: 10px;
+  background: var(--card-solid);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2), 0 0 0 0.5px var(--line);
+}
+.task-list.settling .task-card { transition: none; }
+html.dragging-task, html.dragging-task * { cursor: grabbing !important; }
+
+.check {
+  flex: none; width: 20px; height: 20px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 1.5px solid color-mix(in srgb, var(--ink-3) 70%, transparent); background: none;
+  display: grid; place-items: center; color: #fff;
+}
+.check:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.live .check { border-color: var(--accent); }
+.check.on { border-color: transparent; background: var(--ink-3); }
+.check.on:hover { background: var(--ink-2); }
+
+.tc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.live .tc-main { gap: 5px; }
+.tc-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+.live .tc-title { font-weight: 600; }
+.done .tc-title { color: var(--ink-3); text-decoration: line-through; cursor: default; }
+.tc-meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: var(--ink-3); }
+.tc-project { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.tc-project i { width: 7px; height: 7px; border-radius: 50%; }
+.tc-from { white-space: nowrap; }
+.tc-project + .tc-from { margin-left: -4px; }
+.tc-project + .tc-from::before { content: "· "; }
+.live-tag { font-size: 11px; font-weight: 600; line-height: 17px; padding: 0 7px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
+.tc-progress { flex: 1; min-width: 40px; height: 3px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.tc-progress i { display: block; height: 100%; background: var(--accent); }
+.tc-est { flex: none; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tc-est.live { color: var(--accent-text); font-weight: 600; }
+.tc-est.over { color: var(--warn); }
+
+/* Hover actions take the estimate's place. */
+.tc-actions { position: relative; display: none; align-items: center; gap: 4px; flex: none; }
+.task-card:hover .tc-actions, .task-card:focus-within .tc-actions, .task-card.menu-open .tc-actions { display: flex; }
+.task-card:not(.done):hover .tc-est, .task-card:not(.done):focus-within .tc-est, .task-card.menu-open .tc-est { display: none; }
+.task-list.sorting .tc-actions { display: none !important; }
+.task-list.sorting .tc-est { display: inline !important; }
+.tc-btn {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px;
+  padding: 1px 8px; font: 500 12px/18px inherit; font-family: inherit;
+}
+.tc-btn:hover { background: var(--bg-2); }
+.tc-btn.icon { padding: 1px 6px; letter-spacing: 1px; }
+.tc-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; min-width: 168px; padding: 5px;
+  display: flex; flex-direction: column; border-radius: 9px; background: var(--menu-bg);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.2), 0 0 0 0.5px var(--line);
+  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+.tc-menu button {
+  text-align: left; border: 0; background: none; color: var(--ink); border-radius: 5px; cursor: pointer;
+  padding: 4px 10px; font: 13px/1.4 inherit; font-family: inherit;
+}
+.tc-menu button:hover, .tc-menu button:focus-visible { background: var(--accent); color: var(--accent-ink); outline: none; }
+.tc-menu button.danger { color: var(--warn); }
+.tc-menu button.danger:hover, .tc-menu button.danger:focus-visible { background: var(--warn); color: #fff; }
+.tc-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
+.tc-edit {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--accent); border-radius: 6px;
+  padding: 2px 6px; margin: -3px -7px; outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* ── done ──────────────────────────────────────────────────────────────── */
+.done-group { display: flex; flex-direction: column; gap: 6px; }
+.done-group h4, .group-toggle {
+  margin: 0; padding: 0 4px; font: 600 11px/16px inherit; font-family: inherit; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.group-toggle { display: flex; align-items: center; gap: 6px; border: 0; background: none; cursor: pointer; align-self: flex-start; }
+.group-toggle .count { font-weight: 500; }
+.chev { display: inline-block; font-size: 14px; transition: transform 0.15s; }
+.chev.open { transform: rotate(90deg); }
+.task-card.done { padding-top: 9px; padding-bottom: 9px; }
+
+/* ── footer ────────────────────────────────────────────────────────────── */
+.plan-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -20px;
+  padding: 12px 20px 16px;
+  background: linear-gradient(transparent, var(--wash, var(--bg)) 14px);
+}
+.plan-foot > span { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-3); }
+button.primary.big {
+  height: 32px; padding: 0 16px; display: flex; align-items: center; gap: 7px; white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+button.primary.big:hover { filter: brightness(1.05); }
+
+/* ── toast ─────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed; left: 50%; bottom: 64px; z-index: 20; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 48px);
+  padding: 8px 14px; border-radius: 10px; font-size: 12.5px;
+  background: rgba(36, 36, 38, 0.94); color: #f5f5f7; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.toast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast button.link { color: #ffb340; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@keyframes shake {
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+/* ── Glass ─────────────────────────────────────────────────────────────── */
+html[data-theme="glass"] .task-list,
+html[data-theme="glass"] .quick-add,
+html[data-theme="glass"] .quick-add kbd,
+html[data-theme="glass"] .tc-btn,
+html[data-theme="glass"] .tc-edit { border-width: 0.5px; }
+html[data-theme="glass"] .task-card { border-top-width: 0.5px; }
+html[data-theme="glass"] .tc-menu hr { border-top-width: 0.5px; }
+html[data-theme="glass"] .quick-add { background: color-mix(in srgb, var(--card-solid) 80%, transparent); }
+@media (prefers-color-scheme: dark) {
+  html[data-theme="glass"] .quick-add { background: var(--card); }
+}

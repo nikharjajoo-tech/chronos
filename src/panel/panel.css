@@ -89,9 +89,10 @@ html.panel-window body {
   color: var(--ink-2);
   font: 600 13px/1 inherit;
   font-family: inherit;
-  padding: 7px 14px;
+  padding: 7px 10px;
   border-radius: 8px;
   cursor: pointer;
+  white-space: nowrap;
 }
 .tabs button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
 
@@ -552,8 +553,16 @@ html[data-theme="glass"]:not(.tauri) .panel {
   }
 }
 
-/* The traffic lights sit inside the header (overlay title bar). */
-html.tauri .panel-head { min-height: 52px; box-sizing: border-box; padding-left: 84px; }
+/* The traffic lights sit inside the header (overlay title bar), so they
+   stand in for the logo and the tabs are centred. */
+html.tauri .panel-head { min-height: 52px; box-sizing: border-box; padding-left: 78px; justify-content: center; }
+html.tauri .logo { display: none; }
+@media (max-width: 540px) {
+  html:not(.tauri) .logo { font-size: 0; gap: 0; }
+}
+@media (max-width: 460px) {
+  .tabs button { padding-left: 7px; padding-right: 7px; }
+}
 
 html[data-theme="glass"] .panel-head {
   justify-content: center;
@@ -564,10 +573,11 @@ html[data-theme="glass"] .panel-head {
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
-html.tauri[data-theme="glass"] .panel-head { padding-right: 84px; }
+/* Mirrors the traffic lights while there is room, so the tabs sit in the middle. */
+html.tauri .panel-head { padding-right: clamp(20px, calc(100vw - 402px), 78px); }
 html[data-theme="glass"] .logo { display: none; }
 html[data-theme="glass"] .tabs { gap: 0; padding: 2px; border-radius: 8px; background: var(--bg-2); }
-html[data-theme="glass"] .tabs button { font-size: 12px; font-weight: 500; color: var(--ink); padding: 5px 12px; border-radius: 6px; }
+html[data-theme="glass"] .tabs button { font-size: 12px; font-weight: 500; color: var(--ink); padding: 5px 11px; border-radius: 6px; }
 html[data-theme="glass"] .tabs button.on { background: var(--card-solid); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 0 0 0.5px rgba(0, 0, 0, 0.06); }
 
 html[data-theme="glass"] .card,
