@@ -14,9 +14,17 @@
 ![App size](https://img.shields.io/badge/app-~5%20MB-d4672a?style=flat-square)
 ![Your data](https://img.shields.io/badge/your%20data-stays%20on%20your%20Mac-3f8a5a?style=flat-square)
 
-[**Features**](#-what-it-does) · [**Planner**](#%EF%B8%8F-plan-your-day) · [**Widgets**](#%EF%B8%8F-pick-your-clock) · [**Insights**](#-is-my-focus-getting-better) · [**Shortcuts**](#%EF%B8%8F-keyboard-shortcuts) · [**Install**](#-install) · [**How it's built**](#%EF%B8%8F-how-its-built)
+[**Tour**](#%EF%B8%8F-watch-the-tour) · [**Features**](#-what-it-does) · [**Get better**](#-how-chronos-helps-you-get-better) · [**Planner**](#%EF%B8%8F-plan-your-day) · [**Claude Code**](#-to-dos-from-claude-code) · [**Widgets**](#%EF%B8%8F-pick-your-clock) · [**Insights**](#-is-my-focus-getting-better) · [**Shortcuts**](#%EF%B8%8F-keyboard-shortcuts) · [**Install**](#-install) · [**How it's built**](#%EF%B8%8F-how-its-built)
 
 </div>
+
+---
+
+## ▶️ Watch the tour
+
+<a href="docs/chronos-tour.mp4"><img src="docs/images/tour.jpg" alt="Watch the 2-minute tour of Chronos" width="100%"></a>
+
+**Two minutes, narrated:** planning the day, capturing a task from any app, focusing on one live task, and how Chronos turns your sessions into a weekly score and insights. [Open the video](docs/chronos-tour.mp4) (MP4, 1080p, with subtitles burned in so it works on mute).
 
 ---
 
@@ -97,7 +105,50 @@ Most Pomodoro apps are either a bare countdown or yet another dashboard fighting
 
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🤖 To-dos from Claude Code
+- When Claude Code needs **you** to do something (log in, add a key, test on a device), it puts a to-do at the **top of Today**
+- Tagged with the project it's working in, with the exact command or link in a note
+- Set up once and it works in **every project**, even while Chronos is closed
+
+</td>
+<td width="50%" valign="top">
+
+### 🔒 Private by default
+- No account, no cloud, no telemetry
+- Everything lives in **one SQLite file** on your Mac
+- The only thing that ever leaves is the weekly email, and only if you turn it on
+
+</td>
+</tr>
 </table>
+
+---
+
+## 📈 How Chronos helps you get better
+
+Chronos runs one loop, every day. Each step produces a little honest data, and the next step uses it.
+
+```mermaid
+flowchart LR
+    P["🗂️ Plan<br/>pick Today, set estimates"] --> F["⏱️ Focus<br/>one live task on the clock"]
+    F --> T["🧭 Track<br/>time, pauses, away, distractions"]
+    T --> R["🙂 Reflect<br/>rate the session in one tap"]
+    R --> I["📈 Improve<br/>score, insights, one suggestion"]
+    I --> P
+```
+
+| Step | What you do | What Chronos records | How it's used |
+|---|---|---|---|
+| 🗂️ **Plan** | Pick what goes in Today each morning, with rough estimates | Tasks, projects, estimates | *Today's load* warns you before you over-plan your day |
+| ⏱️ **Focus** | Press start; the top task goes live | Focus time credited to that task, `spent/estimate` | Shows where your hours really went, by task and by `#project` |
+| 🧭 **Track** | Nothing. It happens on its own, plus <kbd>⌃</kbd><kbd>⌥</kbd><kbd>D</kbd> when something pulls you away | Pauses, away time (back-dated), distractions and their reasons | *Staying on task*, distraction peaks, your top distraction |
+| 🙂 **Reflect** | Tap 😫 😐 🙂 🔥 after a session (optional) | How productive each session felt | *Session quality*, and which session lengths work best for you |
+| 📈 **Improve** | Read your weekly score; accept or skip one suggestion | Week-over-week trends | Your best start window, your strongest weekday, the minute you tend to give up, and a nudge like *"Ready to try 30-minute sessions?"* |
+
+> 🧪 **No guesswork.** Every number shows the evidence behind it. An insight only appears when there's enough data to back it up, and missing data is never counted as zero.
 
 ---
 
@@ -128,15 +179,42 @@ The **Plan** tab holds four lists: **Backlog**, **This week**, **Today** and **D
 - **Type it the way you think.** `Email campaign 2hr 15min #work` → *Email campaign*, `#work`, 2h 15m. A number inside the title stays in the title (`Read 3 chapters`), and a task with no estimate is never counted as zero.
 - **One live task.** When focus starts, the top Today task goes live: the clock shows it with `spent/estimate`, and the time you focus is credited to it. Pauses and away time never count. Switch tasks mid-block and the time is split between them.
 - **Finish, then flow.** <kbd>D</kbd> on the clock (or the tick on a card) marks it done with a `✓ Prep slides · 38m` flash, and the next task goes live. <kbd>N</kbd> sends the live task to the bottom of Today. <kbd>S</kbd> still means *skip to break*.
+- **See what you finished.** The Done column totals the time you put into today's finished tasks.
 - **Honest plans.** Today compares *focus already done + what's left of each estimate* with your daily goal: *"3h 49m planned · goal 3h · 49m over."*
 - **Good morning.** The first time you're at your Mac each day (after 5 AM, not while screen sharing), Plan opens with a sheet: yesterday's leftovers ticked, This week and the backlog on offer. **Start the day** makes Today exactly what you picked; the rest goes back to This week.
-- **Two looks.** The panel, board and pop-ups use **Glass** by default (frosted, neutral, orange only as an accent) or **Retro** (cream and orange), chosen in *Settings → Appearance*.
+- **Two looks.** The panel, board and pop-ups use **Glass** by default (frosted, neutral, orange only as an accent) or **Retro** (cream and orange), chosen in *Settings → Look*.
+
+---
+
+## 🤖 To-dos from Claude Code
+
+<img src="docs/images/claude-todos.jpg" alt="Claude Code calls the chronos add_todo tool, and the to-do appears in Today with a Claude badge and a note" width="100%">
+
+When Claude Code hits something only you can do, like logging in, pasting a secret, approving a payment or testing on your phone, it doesn't just mention it in a chat you might scroll past. It adds a to-do to Chronos, right at the top of Today, where your next focus session will find it.
+
+- **Tagged and explained.** Each to-do is tagged `#<project folder>` and carries a note with the exact command, file or link. Hover a card to read the whole note.
+- **Claude only touches its own.** Claude can add, list and tick off the to-dos it created. It never sees or changes the tasks you write. Ask it twice and it won't add a duplicate.
+- **Works with Chronos closed.** `chronos mcp` is a small MCP server built into the app. It writes to the same local database, and a running Chronos shows new to-dos within about two seconds.
+- **Ordinary tasks after that.** A **Claude** badge marks them in the Plan tab and on the board; otherwise you can drag, edit, start or delete them like any other task.
+
+Set it up once for every project:
+
+```bash
+claude mcp add --scope user chronos -- /Applications/Chronos.app/Contents/MacOS/chronos mcp
+```
+
+Then tell Claude when to use it in `~/.claude/CLAUDE.md`. The full instructions, the three tools (`add_todo`, `list_todos`, `complete_todo`) and how to turn it off are in **[docs/CLAUDE-CODE.md](docs/CLAUDE-CODE.md)**.
 
 ---
 
 ## 📊 Is my focus getting better?
 
 Chronos has five tabs: **Today**, **Plan**, **History**, **Insights** and **Settings**.
+
+- **Today**: focus against your daily goal, the live session, a timeline of every session and distraction, and hours by project.
+- **History**: any week or month next to the one before it: focus per day, *when* you focus and get distracted, projects and distraction reasons.
+- **Insights**: the weekly score with its evidence, the last 8 weeks, one suggestion, and what your data says.
+- **Settings**: five short sections (*Timer · Focus · Look · Hiding · General*), one line per option, with an ⓘ hint wherever an option needs explaining.
 
 <img src="docs/images/panels.jpg" alt="Today, History and Insights tabs" width="100%">
 
@@ -204,7 +282,7 @@ Every insight comes from the last four weeks of *your* sessions, and shows what 
 
 <br>
 
-Opt in under **Settings → Weekly email**. Every Monday at 9 AM (or whenever you choose), you get last week's score, your numbers vs the week before, focus per day, projects, top insights and one thing to try. **Task names are never included.**
+Opt in under **Settings → General → Weekly email**. Every Monday at 9 AM (or whenever you choose), you get last week's score, your numbers vs the week before, focus per day, projects, top insights and one thing to try. **Task names are never included.**
 
 <img src="docs/images/email.png" alt="Weekly summary email" width="420">
 
@@ -214,9 +292,9 @@ It's sent through **your own Gmail** using an [app password](https://myaccount.g
 
 ### Tiny popups, never in the way
 
-<img src="docs/images/popups.png" alt="Distraction logger and end-of-session reflection" width="100%">
+<img src="docs/images/popups.png" alt="The quick-add box, the distraction logger and the end-of-session reflection" width="100%">
 
-Both popups close themselves, never need an answer, and stay hidden while you're sharing your screen.
+The distraction and reflection popups close themselves, never need an answer, and stay hidden while you're sharing your screen. The add-task box opens only when you press <kbd>⌃</kbd><kbd>⌥</kbd><kbd>T</kbd>.
 
 ---
 
@@ -325,6 +403,7 @@ Planner states work the same way: `?view=panel&board&live&run=running#plan` (the
 |---|---|
 | 📁 **Where your data lives** | `~/Library/Application Support/com.chronos.desk/chronos.sqlite3`, one file you can open, back up or delete |
 | ☁️ **Network access** | **None**, except the weekly email if you turn it on (sent through your own Gmail) |
+| 🤖 **Claude Code** | Optional. The `chronos mcp` server runs locally and only reads or changes the to-dos Claude added, never your own tasks. |
 | 👤 **Accounts and telemetry** | None |
 | 🔑 **Passwords** | Only the optional Gmail app password, kept in the macOS Keychain |
 | 🙈 **Screen-sharing safety** | Auto-hide, a hide hotkey, and capture protection. The morning prompt waits until sharing stops. |
@@ -343,6 +422,7 @@ flowchart TB
         AN["Analytics & insights<br/>score · suggestions"] --- DB
         SH["Desktop shell<br/>tray · hotkeys · windows · DND"] --- T
         EM["Weekly email<br/>Gmail + Keychain"] --- AN
+        MC["chronos mcp<br/>to-dos from Claude Code"] --- DB
     end
     subgraph UI["⚛️ React UI (only what you see)"]
         CL["Floating clock<br/>4 widgets × 3 styles"]
@@ -376,6 +456,7 @@ chronos/
 │   ├── engine.rs             # timer + settings + database glue, live task, morning prompt
 │   ├── tasks.rs              # planner types and the task parser
 │   ├── db.rs                 # SQLite schema & migrations
+│   ├── mcp.rs                # `chronos mcp`: MCP server so Claude Code can add to-dos
 │   ├── analytics.rs          # weekly / monthly aggregates, streaks
 │   ├── insights.rs           # score, insights, suggestions, companion lines
 │   ├── companion.rs          # watchdog, away detection, auto-hide, DND, popups
@@ -383,12 +464,14 @@ chronos/
 │   ├── sysmac.rs             # macOS idle time, process list, Shortcuts
 │   └── shell.rs              # windows, tray, menus, global hotkeys
 ├── docs/DESIGN.md            # the design notes behind all of this
-└── docs/PLANNER-PHASE1.md    # the planner's spec
+├── docs/PLANNER-PHASE1.md    # the planner's spec
+├── docs/CLAUDE-CODE.md       # setting up Claude Code to-dos
+└── docs/chronos-tour.mp4     # the 2-minute narrated tour
 ```
 
 </details>
 
-**Tested:** 94 Rust tests (timer maths, sleep and crash recovery, away pauses, analytics, score, insights, suggestions, email rendering, task parsing, live-task time credit, the morning prompt) and 36 UI tests (formatting, drag-and-drop maths, planned load).
+**Tested:** 99 Rust tests (timer maths, sleep and crash recovery, away pauses, analytics, score, insights, suggestions, email rendering, task parsing, live-task time credit, the morning prompt) and 36 UI tests (formatting, drag-and-drop maths, planned load).
 
 ---
 
@@ -402,9 +485,10 @@ chronos/
 - [x] Weekly email
 - [x] Planner: Today / This week / Backlog, board view, live task, estimates vs actual, ⌃⌥T quick add, morning prompt
 - [x] Glass theme for the panel, board, pop-ups and clock
+- [x] Redesigned Today, History, Insights and Settings tabs, and a new app icon
 - [ ] Planner phase 2: estimate-accuracy insights, time per task in History, logging time by hand
 - [ ] Planner phase 3: due dates, recurring tasks, reminders
-- [ ] Planner phase 4: an MCP server so Claude can read and add your tasks
+- [x] Claude Code to-dos: a built-in MCP server (`chronos mcp`) so Claude Code can hand you action items
 - [ ] Ambient focus sounds (brown noise, rain, a soft tick)
 - [ ] Save your own focus modes
 - [ ] CSV export and automatic backups
@@ -425,10 +509,10 @@ No. Hiding only hides the window. The timer and tracking keep running, and the s
 The timer works from absolute end times, so it never drifts. If you were away longer than your away-detection setting, the session pauses as of the moment you left.
 
 **Can it hide during Google Meet in Chrome?**
-Calls running inside a browser can't be detected, so use <kbd>⌘</kbd><kbd>⇧</kbd><kbd>H</kbd> or turn on *Invisible in screenshots & recordings*.
+Calls running inside a browser can't be detected, so use <kbd>⌘</kbd><kbd>⇧</kbd><kbd>H</kbd> or turn on *Invisible in screenshots* (*Settings → Hiding*).
 
 **Where's the Dock icon?**
-Chronos lives in the menu bar by default. Turn on *Settings → Startup → Show in Dock* if you'd like one.
+Chronos lives in the menu bar by default. Turn on *Settings → General → Show in Dock* if you'd like one.
 
 **Windows or Linux?**
 Not yet. The core is cross-platform, but some features (idle detection, Do Not Disturb, auto-hide) are macOS-only for now.
