@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, isTauri } from "../api";
 import { MINUTE, prettyShortcut } from "../format";
-import { remainingOf, useSecondTick, useSettings, useSnapshot } from "../hooks";
+import { clockStyleClass, remainingOf, useSecondTick, useSettings, useSnapshot } from "../hooks";
 import type { Snapshot } from "../types";
 import { LAYOUTS, Layout } from "./layouts";
 import { act, taskSpent, type Editing, type Model } from "./parts";
@@ -57,7 +57,7 @@ export function Clock() {
 
   return (
     <div
-      className={`clock-root style-${settings.style} layout-${widget}`}
+      className={`clock-root ${clockStyleClass(settings.style)} layout-${widget}`}
       style={{ ["--op" as string]: settings.opacity }}
       onMouseDown={onMouseDown}
       onContextMenu={(e) => {

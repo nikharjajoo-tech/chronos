@@ -684,8 +684,11 @@ the planner canvas.
 
 - `settings.theme`: `"glass" | "retro"`, default `"glass"`, so existing
   installs switch to Glass and can switch back.
-- The clock keeps its own `style` (Retro default, Minimal); **Glass becomes a
-  third clock style** in step 9. The clock's distraction and reflection
+- The clock keeps its own `style` (Retro default, Minimal); **Glass is a
+  third clock style** (step 9). It reuses Minimal's shapes (thin ring, plain
+  digits) with the Glass colours and system font; orange marks focus and the
+  main key, teal and purple the breaks. The clock window has no vibrancy, so
+  the surface is mostly opaque. The clock's distraction and reflection
   pop-ups follow the clock's style, not the panel theme.
 - macOS 13 has no Liquid Glass (macOS 26 only); the system vibrancy blur is
   what shows through. The browser preview fakes it with `backdrop-filter`

@@ -33,7 +33,7 @@ pub const WIDGETS: &[(&str, &str, f64, f64)] = &[
 pub const DEFAULT_AUTO_HIDE_APPS: &[&str] = &["CptHost", "screencaptureui", "obs"];
 pub const MENU_BAR_TIMER: &[&str] = &["off", "hidden", "always"];
 
-pub const STYLES: &[(&str, &str)] = &[("retro", "Retro"), ("minimal", "Minimal")];
+pub const STYLES: &[(&str, &str)] = &[("retro", "Retro"), ("minimal", "Minimal"), ("glass", "Glass")];
 /// Look of the panel, board and their pop-ups. Light or dark follows macOS.
 pub const THEMES: &[(&str, &str)] = &[("glass", "Glass"), ("retro", "Retro")];
 pub const SCALE_RANGE: (f64, f64) = (0.6, 2.0);
@@ -66,7 +66,7 @@ pub struct Settings {
     pub hide_shortcut: String,
     /// "pill" | "small" | "medium" | "large"
     pub widget: String,
-    /// Clock style: "retro" | "minimal"
+    /// Clock style: "retro" | "minimal" | "glass"
     pub style: String,
     /// Panel and board theme: "glass" | "retro"
     pub theme: String,

@@ -223,6 +223,7 @@ export function SettingsView() {
           <div className="chips">
             <button className={settings.style === "retro" ? "on" : ""} onClick={() => save({ style: "retro" }, true)}>Retro</button>
             <button className={settings.style === "minimal" ? "on" : ""} onClick={() => save({ style: "minimal" }, true)}>Minimal</button>
+            <button className={settings.style === "glass" ? "on" : ""} onClick={() => save({ style: "glass" }, true)}>Glass</button>
           </div>
         </Row>
         <Row label="Size">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import type { Settings, Snapshot, Theme } from "./types";
+import type { ClockStyle, Settings, Snapshot, Theme } from "./types";
 
 export function useSnapshot(): Snapshot | null {
   const [snap, setSnap] = useState<Snapshot | null>(null);
@@ -52,6 +52,14 @@ export function useTheme(settings: Settings | null) {
       // Private storage off: the next window just starts in Glass.
     }
   }, [theme]);
+}
+
+/**
+ * Class names for a clock style. Glass is built on Minimal's shapes (thin
+ * ring, plain digits) and only changes the look, so it carries both.
+ */
+export function clockStyleClass(style: ClockStyle | undefined): string {
+  return style === "glass" ? "style-minimal style-glass" : `style-${style ?? "retro"}`;
 }
 
 /** Remaining ms, derived from the absolute end time, never counted down locally. */

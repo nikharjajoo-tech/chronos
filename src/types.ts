@@ -3,7 +3,7 @@
 export type Phase = "focus" | "short_break" | "long_break";
 export type RunState = "idle" | "running" | "paused";
 export type Widget = "pill" | "small" | "medium" | "large";
-export type ClockStyle = "retro" | "minimal";
+export type ClockStyle = "retro" | "minimal" | "glass";
 export type Theme = "glass" | "retro";
 
 export interface Snapshot {
