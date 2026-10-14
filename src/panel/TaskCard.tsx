@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { fmtDuration } from "../format";
 import type { Bucket, TaskRow } from "../types";
 import { BOARD_BUCKETS, COLUMN_LABEL, estimateLabel, leftoverLabel, projectColor } from "./planModel";
@@ -36,6 +37,7 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, board
   const [editing, setEditing] = useState(false);
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
+  const tip = useFullText(!editing && !menu && !dragging);
   const est = estimateLabel(t.estimateMs, spentMs);
   const pct = live && t.estimateMs ? Math.min(1, spentMs / t.estimateMs) : 0;
   const inline = live && !board;
@@ -70,7 +72,11 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, board
       tabIndex={0}
       aria-label={`${t.title}${t.project ? `, #${t.project}` : ""}${est ? `, ${est.text}` : ""}${live ? ", live" : ""}`}
       style={style}
-      onPointerDown={onPointerDown}
+      {...tip.handlers}
+      onPointerDown={(e) => {
+        tip.hide();
+        onPointerDown(e);
+      }}
       onClickCapture={(e) => {
         if (consumeClick()) {
           e.stopPropagation();
@@ -92,7 +98,7 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, board
             }}
           />
         ) : (
-          <span className="tc-title" title="Click to edit" onClick={() => setEditing(true)}>
+          <span className="tc-title" onClick={() => setEditing(true)}>
             {t.title}
           </span>
         )}
@@ -115,7 +121,7 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, board
           </div>
         )}
         {t.note && (
-          <span className="tc-note-text" title={t.note}>
+          <span className="tc-note-text">
             {t.note}
           </span>
         )}
@@ -154,7 +160,66 @@ export function TaskCard({ task: t, live, spentMs, now, actions, dragging, board
           )}
         </div>
       )}
+      {tip.rect && <FullText rect={tip.rect} title={t.title} note={t.note} />}
     </li>
+  );
+}
+
+/** Hovering a card whose name or note is cut off (…) shows all of it after a
+ *  moment. Off while editing, dragging or with the menu open. */
+function useFullText(enabled: boolean) {
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const timer = useRef(0);
+  const hide = () => {
+    clearTimeout(timer.current);
+    setRect(null);
+  };
+  useEffect(() => {
+    if (!enabled) hide();
+  }, [enabled]);
+  useEffect(() => {
+    if (!rect) return;
+    addEventListener("scroll", hide, true);
+    addEventListener("blur", hide);
+    return () => {
+      removeEventListener("scroll", hide, true);
+      removeEventListener("blur", hide);
+    };
+  }, [rect]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const handlers = {
+    onPointerEnter(e: React.PointerEvent<HTMLElement>) {
+      if (!enabled || e.buttons) return;
+      const card = e.currentTarget;
+      clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => cutOff(card) && setRect(card.getBoundingClientRect()), 450);
+    },
+    onPointerLeave: hide,
+  };
+  return { rect, hide, handlers };
+}
+
+/** True when the title or note doesn't fit: one line with … in the panel, two lines on the board. */
+function cutOff(card: HTMLElement) {
+  return [...card.querySelectorAll<HTMLElement>(".tc-title, .tc-note-text")].some(
+    (el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1,
+  );
+}
+
+/** The pop-up: under the card, or above it near the bottom of the window. */
+function FullText({ rect, title, note }: { rect: DOMRect; title: string; note?: string | null }) {
+  const width = Math.min(Math.max(rect.width, 260), innerWidth - 16);
+  const left = Math.max(8, Math.min(rect.left, innerWidth - width - 8));
+  const below = innerHeight - rect.bottom >= Math.min(rect.top, 180);
+  const style: CSSProperties = below
+    ? { top: rect.bottom + 6, left, width, maxHeight: innerHeight - rect.bottom - 14 }
+    : { bottom: innerHeight - rect.top + 6, left, width, maxHeight: rect.top - 14 };
+  return createPortal(
+    <div className="card-tip" role="tooltip" style={style}>
+      <b>{title}</b>
+      {note && <p>{note}</p>}
+    </div>,
+    document.body,
   );
 }
 
@@ -232,8 +297,9 @@ function CardMenu({ task, onClose, onEdit, onMove, onDelete }: { task: TaskRow; 
 
 /** A finished task: tick to reopen it. */
 export function DoneCard({ task: t, onReopen }: { task: TaskRow; onReopen(): void }) {
+  const tip = useFullText(true);
   return (
-    <li className="task-card done">
+    <li className="task-card done" {...tip.handlers} onPointerDown={tip.hide}>
       <button className="check on" aria-label={`Reopen ${t.title}`} title="Reopen" onClick={onReopen}>
         <CheckIcon />
       </button>
@@ -248,6 +314,7 @@ export function DoneCard({ task: t, onReopen }: { task: TaskRow; onReopen(): voi
         )}
       </div>
       <span className="tc-est">{t.spentMs > 0 ? fmtDuration(t.spentMs) : "no time tracked"}</span>
+      {tip.rect && <FullText rect={tip.rect} title={t.title} note={t.note} />}
     </li>
   );
 }

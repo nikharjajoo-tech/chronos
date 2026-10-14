@@ -122,7 +122,7 @@ html.dragging-task, html.dragging-task * { cursor: grabbing !important; }
 .tc-from { white-space: nowrap; }
 /* Added by Claude Code (chronos mcp): a small badge, and its note under the title. */
 .tc-claude { flex: none; font-size: 11px; font-weight: 600; line-height: 16px; padding: 0 6px; border-radius: 999px; color: #b04e2d; background: rgba(217, 119, 87, 0.15); }
-.tc-note-text { min-width: 0; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; }
+.tc-note-text { min-width: 0; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cards .tc-note-text { grid-column: 2 / 4; }
 .tc-project + .tc-from { margin-left: -4px; }
 .tc-project + .tc-from::before { content: "· "; }
@@ -160,6 +160,16 @@ html.dragging-task, html.dragging-task * { cursor: grabbing !important; }
 .tc-menu button.danger { color: var(--warn); }
 .tc-menu button.danger:hover, .tc-menu button.danger:focus-visible { background: var(--warn); color: #fff; }
 .tc-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
+/* The whole name and note of a card that's cut off, on hover (FullText). */
+.card-tip {
+  position: fixed; z-index: 50; pointer-events: none; overflow: hidden; padding: 8px 11px; border-radius: 9px;
+  background: var(--menu-bg); color: var(--ink); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.2), 0 0 0 0.5px var(--line);
+  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+  animation: m-fade 0.12s ease-out;
+}
+.card-tip b { display: block; font-weight: 600; }
+.card-tip p { margin: 4px 0 0; font-size: 12px; color: var(--ink-2); white-space: pre-wrap; }
 .tc-edit {
   font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--accent); border-radius: 6px;
   padding: 2px 6px; margin: -3px -7px; outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
