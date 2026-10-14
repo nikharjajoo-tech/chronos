@@ -109,7 +109,7 @@ Most Pomodoro apps are either a bare countdown or yet another dashboard fighting
 <td width="50%" valign="top">
 
 ### 🤖 To-dos from Claude Code
-- When Claude Code needs **you** to do something (log in, add a key, test on a device), it puts a to-do at the **top of Today**
+- When Claude Code needs **you** to do something (log in, add a key, test on a device), it puts a to-do at the **top of Today**, or This week or the Backlog if you ask
 - Tagged with the project it's working in, with the exact command or link in a note
 - Set up once and it works in **every project**, even while Chronos is closed
 
@@ -190,10 +190,10 @@ The **Plan** tab holds four lists: **Backlog**, **This week**, **Today** and **D
 
 <img src="docs/images/claude-todos.jpg" alt="Claude Code calls the chronos add_todo tool, and the to-do appears in Today with a Claude badge and a note" width="100%">
 
-When Claude Code hits something only you can do, like logging in, pasting a secret, approving a payment or testing on your phone, it doesn't just mention it in a chat you might scroll past. It adds a to-do to Chronos, right at the top of Today, where your next focus session will find it.
+When Claude Code hits something only you can do, like logging in, pasting a secret, approving a payment or testing on your phone, it doesn't just mention it in a chat you might scroll past. It adds a to-do to Chronos, right at the top of Today, where your next focus session will find it. Ask for **This week** or the **Backlog** instead and it goes there.
 
 - **Tagged and explained.** Each to-do is tagged `#<project folder>` and carries a note with the exact command, file or link. Hover a card to read the whole note.
-- **Claude only touches its own.** Claude can add, list and tick off the to-dos it created. It never sees or changes the tasks you write. Ask it twice and it won't add a duplicate.
+- **Claude only touches its own.** Claude can add, list, move and tick off the to-dos it created. It never sees or changes the tasks you write. Ask it twice and it won't add a duplicate.
 - **Works with Chronos closed.** `chronos mcp` is a small MCP server built into the app. It writes to the same local database, and a running Chronos shows new to-dos within about two seconds.
 - **Ordinary tasks after that.** A **Claude** badge marks them in the Plan tab and on the board; otherwise you can drag, edit, start or delete them like any other task.
 
@@ -471,7 +471,7 @@ chronos/
 
 </details>
 
-**Tested:** 99 Rust tests (timer maths, sleep and crash recovery, away pauses, analytics, score, insights, suggestions, email rendering, task parsing, live-task time credit, the morning prompt) and 36 UI tests (formatting, drag-and-drop maths, planned load).
+**Tested:** 101 Rust tests (timer maths, sleep and crash recovery, away pauses, analytics, score, insights, suggestions, email rendering, task parsing, live-task time credit, the morning prompt) and 36 UI tests (formatting, drag-and-drop maths, planned load).
 
 ---
 

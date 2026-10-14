@@ -2,7 +2,7 @@
 //! Code, in any project, can put things only you can do into Chronos. It runs
 //! without the app: it opens the same database, and a running Chronos picks
 //! the change up within a couple of seconds (`Db::changed_elsewhere`).
-//! Claude sees and ticks off only the to-dos it added (`source = "claude"`).
+//! Claude sees, moves and ticks off only the to-dos it added (`source = "claude"`).
 //! See docs/CLAUDE-CODE.md.
 
 use crate::db::Db;
@@ -101,15 +101,17 @@ fn tools() -> Value {
         {
             "name": "add_todo",
             "title": "Add a to-do for the user",
-            "description": "Put something only the user can do (outside this chat) at the top of Today in Chronos, \
-                tagged with this project. Returns the to-do's id. If the same open to-do exists, returns that one instead.",
+            "description": "Put something only the user can do (outside this chat) at the top of a list in Chronos \
+                (Today unless the user asks for This week or the Backlog), tagged with this project. Returns the to-do's id. \
+                If the same open to-do exists, returns that one instead.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "title": { "type": "string", "description": "Short and imperative, e.g. \"Log in to the GitHub CLI\". At most 120 characters." },
                     "note": { "type": "string", "description": "The details: the exact command, file, link, or why it's needed." },
                     "project": { "type": "string", "description": "Project tag without #. Defaults to this project's folder name." },
-                    "estimate_minutes": { "type": "integer", "minimum": 1, "maximum": 480, "description": "Rough time it'll take the user, if you can tell." }
+                    "estimate_minutes": { "type": "integer", "minimum": 1, "maximum": 480, "description": "Rough time it'll take the user, if you can tell." },
+                    "list": list_schema()
                 },
                 "required": ["title"]
             }
@@ -117,12 +119,25 @@ fn tools() -> Value {
         {
             "name": "list_todos",
             "title": "List Claude's to-dos",
-            "description": "The to-dos Claude added to Chronos that are still open (and, with include_done, those finished in the last 7 days). Never shows the user's own tasks.",
+            "description": "The to-dos Claude added to Chronos that are still open, with the list each is in (and, with include_done, those finished in the last 7 days). Never shows the user's own tasks.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "include_done": { "type": "boolean", "description": "Also list ones finished in the last 7 days." } }
             },
             "annotations": { "readOnlyHint": true }
+        },
+        {
+            "name": "move_todo",
+            "title": "Move a to-do to another list",
+            "description": "Move one of Claude's to-dos to the top of Today, This week or the Backlog. Only works on to-dos Claude added.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "integer", "description": "The id add_todo or list_todos gave." },
+                    "list": list_schema()
+                },
+                "required": ["id", "list"]
+            }
         },
         {
             "name": "complete_todo",
@@ -137,6 +152,45 @@ fn tools() -> Value {
     ])
 }
 
+/// The three lists of the Plan tab, as Claude names them.
+fn list_schema() -> Value {
+    json!({
+        "type": "string",
+        "enum": ["today", "this_week", "backlog"],
+        "description": "Which list: today (the default), this_week or backlog."
+    })
+}
+
+fn parse_list(v: &Value) -> Result<Bucket, String> {
+    match v.as_str().map(|s| s.trim().to_ascii_lowercase().replace([' ', '-'], "_")).as_deref() {
+        None | Some("") | Some("today") => Ok(Bucket::Today),
+        Some("this_week" | "week") => Ok(Bucket::Week),
+        Some("backlog") => Ok(Bucket::Backlog),
+        Some(other) => Err(format!("There's no \"{other}\" list; use today, this_week or backlog.")),
+    }
+}
+
+/// How the Plan tab names a list.
+fn list_name(b: Bucket) -> &'static str {
+    match b {
+        Bucket::Today => "Today",
+        Bucket::Week => "This week",
+        Bucket::Backlog => "Backlog",
+    }
+}
+
+/// Claude's own to-do `id`, or why it can't be touched.
+fn own_todo(db: &Db, id: i64, today: i64) -> Result<TaskRow, String> {
+    let t = db
+        .task(id, today)
+        .map_err(|e| format!("Chronos couldn't read that: {e}"))?
+        .ok_or(format!("There's no to-do #{id} in Chronos."))?;
+    if t.source.as_deref() != Some(SOURCE) {
+        return Err(format!("#{id} is one of the user's own tasks, not Claude's; only they can change it."));
+    }
+    Ok(t)
+}
+
 fn call(db: &Db, name: &str, args: &Value, now: i64) -> Result<String, String> {
     let today = day_bounds(now).0;
     let db_err = |e: rusqlite::Error| format!("Chronos couldn't save that: {e}");
@@ -148,6 +202,7 @@ fn call(db: &Db, name: &str, args: &Value, now: i64) -> Result<String, String> {
                 None if task.project.is_none() => task.project = folder_project(),
                 None => {}
             }
+            let bucket = parse_list(&args["list"])?;
             if let Some(m) = args["estimate_minutes"].as_i64() {
                 task.estimate_ms = Some(m.clamp(1, 480) * MINUTE);
             }
@@ -159,11 +214,16 @@ fn call(db: &Db, name: &str, args: &Value, now: i64) -> Result<String, String> {
             // The same open to-do already there: say so instead of adding it twice.
             let open = db.tasks_from(SOURCE, i64::MAX, today).map_err(db_err)?;
             if let Some(t) = open.iter().find(|t| t.title.eq_ignore_ascii_case(&task.title)) {
-                return Ok(format!("Already in Chronos as #{}: {}", t.id, t.title));
+                return Ok(format!(
+                    "Already in Chronos as #{} in {}: {} (move_todo moves it)",
+                    t.id,
+                    list_name(t.bucket),
+                    t.title
+                ));
             }
-            let id = db.insert_task_from(&task, Bucket::Today, true, now, note.as_deref(), Some(SOURCE)).map_err(db_err)?;
+            let id = db.insert_task_from(&task, bucket, true, now, note.as_deref(), Some(SOURCE)).map_err(db_err)?;
             let tag = task.project.map(|p| format!(" (#{p})")).unwrap_or_default();
-            Ok(format!("Added to the top of Today in Chronos as #{id}: {}{tag}", task.title))
+            Ok(format!("Added to the top of {} in Chronos as #{id}: {}{tag}", list_name(bucket), task.title))
         }
         "list_todos" => {
             let since = if args["include_done"].as_bool().unwrap_or(false) { today - 6 * DAY } else { i64::MAX };
@@ -173,12 +233,20 @@ fn call(db: &Db, name: &str, args: &Value, now: i64) -> Result<String, String> {
             }
             Ok(rows.iter().map(describe).collect::<Vec<_>>().join("\n"))
         }
+        "move_todo" => {
+            let id = args["id"].as_i64().ok_or("Give the to-do's id.")?;
+            let bucket = parse_list(&args["list"])?;
+            let t = own_todo(db, id, today)?;
+            if t.done {
+                return Err(format!("#{id} is already done: {}", t.title));
+            }
+            let top = db.open_tasks(bucket, today).map_err(db_err)?.into_iter().map(|t| t.id).find(|&o| o != id);
+            db.move_task(id, bucket, top, now).map_err(db_err)?;
+            Ok(format!("Moved #{id} to the top of {} in Chronos: {}", list_name(bucket), t.title))
+        }
         "complete_todo" => {
             let id = args["id"].as_i64().ok_or("Give the to-do's id.")?;
-            let t = db.task(id, today).map_err(db_err)?.ok_or(format!("There's no to-do #{id} in Chronos."))?;
-            if t.source.as_deref() != Some(SOURCE) {
-                return Err(format!("#{id} is one of the user's own tasks, not Claude's; only they can tick it off."));
-            }
+            let t = own_todo(db, id, today)?;
             if t.done {
                 return Ok(format!("#{id} is already done: {}", t.title));
             }
@@ -189,9 +257,9 @@ fn call(db: &Db, name: &str, args: &Value, now: i64) -> Result<String, String> {
     }
 }
 
-/// "#12 · open · Log in to the GitHub CLI · #chronos" plus the note.
+/// "#12 · Today · Log in to the GitHub CLI · #chronos" plus the note.
 fn describe(t: &TaskRow) -> String {
-    let mut line = format!("#{} · {} · {}", t.id, if t.done { "done" } else { "open" }, t.title);
+    let mut line = format!("#{} · {} · {}", t.id, if t.done { "done" } else { list_name(t.bucket) }, t.title);
     if let Some(p) = &t.project {
         line += &format!(" · #{p}");
     }
@@ -242,7 +310,7 @@ mod tests {
             .iter()
             .map(|t| t["name"].as_str().unwrap().to_string())
             .collect();
-        assert_eq!(names, ["add_todo", "list_todos", "complete_todo"]);
+        assert_eq!(names, ["add_todo", "list_todos", "move_todo", "complete_todo"]);
         assert_eq!(rpc(&db, "nope", json!({}))["error"]["code"], -32601);
     }
 
@@ -258,6 +326,39 @@ mod tests {
         assert_eq!(top.note.as_deref(), Some("Run `gh auth login`"));
         assert_eq!(top.source.as_deref(), Some(SOURCE));
         assert_eq!(top.estimate_ms, Some(5 * MINUTE));
+    }
+
+    fn top_of(db: &Db, bucket: Bucket) -> TaskRow {
+        db.open_tasks(bucket, day_bounds(NOW).0).unwrap().into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn adds_to_this_week_or_the_backlog_when_asked() {
+        let db = Db::open_in_memory().unwrap();
+        db.insert_task(&tasks::parse("Mine").unwrap(), Bucket::Week, false, NOW).unwrap();
+        let out = tool(&db, "add_todo", json!({ "title": "Review the Revlon deck", "project": "revlon", "list": "this_week" })).unwrap();
+        assert!(out.contains("top of This week"), "{out}");
+        assert_eq!(top_of(&db, Bucket::Week).title, "Review the Revlon deck");
+        tool(&db, "add_todo", json!({ "title": "Read the brand guide", "list": "Backlog" })).unwrap();
+        assert_eq!(top_of(&db, Bucket::Backlog).title, "Read the brand guide");
+        assert!(db.open_tasks(Bucket::Today, day_bounds(NOW).0).unwrap().is_empty());
+        assert!(tool(&db, "add_todo", json!({ "title": "X", "list": "someday" })).is_err());
+    }
+
+    #[test]
+    fn moves_only_its_own_todos() {
+        let db = Db::open_in_memory().unwrap();
+        db.insert_task(&tasks::parse("Mine").unwrap(), Bucket::Week, false, NOW).unwrap();
+        tool(&db, "add_todo", json!({ "title": "Send the brief", "project": "revlon" })).unwrap();
+        let id = top_of(&db, Bucket::Today).id;
+        let out = tool(&db, "move_todo", json!({ "id": id, "list": "this_week" })).unwrap();
+        assert!(out.starts_with("Moved"), "{out}");
+        assert_eq!(top_of(&db, Bucket::Week).id, id);
+        assert!(tool(&db, "list_todos", json!({})).unwrap().contains("This week · Send the brief"));
+        let mine = db.open_tasks(Bucket::Week, day_bounds(NOW).0).unwrap()[1].id;
+        assert!(tool(&db, "move_todo", json!({ "id": mine, "list": "backlog" })).is_err());
+        let again = tool(&db, "add_todo", json!({ "title": "send the brief" })).unwrap();
+        assert!(again.contains("in This week"), "{again}");
     }
 
     #[test]
